@@ -22,7 +22,6 @@ import java.time.LocalDateTime;
 
 @RestController
 @RequestMapping("/api/auth")
-@RequiredArgsConstructor
 public class AuthController {
 
     private final AuthenticationManager authenticationManager;
@@ -30,8 +29,24 @@ public class AuthController {
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
 
+    public AuthController(AuthenticationManager authenticationManager, UserService userService, 
+                         JwtService jwtService, PasswordEncoder passwordEncoder) {
+        this.authenticationManager = authenticationManager;
+        this.userService = userService;
+        this.jwtService = jwtService;
+        this.passwordEncoder = passwordEncoder;
+    }
+
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<AuthResponse> register(@RequestBody RegisterRequest request) {
+        try {
+            System.out.println("=== REGISTRATION DEBUG START ===");
+            System.out.println("Email: " + request.getEmail());
+            System.out.println("FirstName: " + request.getFirstName());
+            System.out.println("LastName: " + request.getLastName());
+            System.out.println("PhoneNumber: " + request.getPhoneNumber());
+            System.out.println("Role: " + request.getRole());
+            System.out.println("=== REGISTRATION DEBUG END ===");
         if (userService.userExists(request.getEmail())) {
             return ResponseEntity.badRequest()
                 .body(AuthResponse.builder()
@@ -47,6 +62,7 @@ public class AuthController {
                 .phoneNumber(request.getPhoneNumber())
                 .role(request.getRole() != null ? request.getRole() : User.UserRole.CLIENT)
                 .status(User.UserStatus.ACTIVE)
+                .profileCompletionStatus(User.ProfileCompletionStatus.BASIC_COMPLETE)
                 .build();
 
         if (request.getLocation() != null) {
@@ -77,6 +93,14 @@ public class AuthController {
                 .user(savedUser)
                 .message("User registered successfully")
                 .build());
+        } catch (Exception e) {
+            System.out.println("Registration error: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.badRequest()
+                .body(AuthResponse.builder()
+                    .message("Registration failed: " + e.getMessage())
+                    .build());
+        }
     }
 
     @PostMapping("/login")

@@ -26,6 +26,8 @@ public class RegisterRequest {
     private String firstName;
 
     private String lastName;
+    
+    @NotBlank(message = "Phone number is required")
     private String phoneNumber;
 
     // Enum from User entity

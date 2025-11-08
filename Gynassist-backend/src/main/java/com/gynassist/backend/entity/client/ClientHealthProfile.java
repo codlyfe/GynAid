@@ -6,56 +6,50 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
-
 import java.time.LocalDateTime;
 
-/**
- * Comprehensive health profile for clients.
- * Linked to User via OneToOne relationship.
- * All fields are nullable to maintain backward compatibility.
- */
+@Entity
+@Table(name = "client_health_profiles")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Entity
-@Table(name = "client_health_profiles")
 public class ClientHealthProfile {
-
+    
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
+    
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false, unique = true)
+    @JoinColumn(name = "user_id", nullable = false)
     private User user;
-
-    // Profile completion tracking
-    @Column(name = "completion_percentage")
+    
+    @Column(name = "emergency_contact_name")
+    private String emergencyContactName;
+    
+    @Column(name = "emergency_contact_phone")
+    private String emergencyContactPhone;
+    
+    @Column(name = "emergency_contact_relationship")
+    private String emergencyContactRelationship;
+    
+    @Column(name = "profile_completion_percentage")
     @Builder.Default
-    private Integer completionPercentage = 0;
-
-    @Column(name = "last_updated_profile")
-    private LocalDateTime lastUpdatedProfile;
-
-    @CreationTimestamp
+    private Integer profileCompletionPercentage = 0;
+    
     @Column(name = "created_at")
-    private LocalDateTime createdAt;
-
-    @UpdateTimestamp
+    @Builder.Default
+    private LocalDateTime createdAt = LocalDateTime.now();
+    
     @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
-
-    // Relationships to other profile entities
-    @OneToOne(mappedBy = "healthProfile", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
-    private MedicalVitals medicalVitals;
-
-    @OneToOne(mappedBy = "healthProfile", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
-    private MedicalHistory medicalHistory;
-
-    @OneToOne(mappedBy = "healthProfile", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
+    @Builder.Default
+    private LocalDateTime updatedAt = LocalDateTime.now();
+    
+    @OneToOne(mappedBy = "healthProfile", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private GynecologicalProfile gynecologicalProfile;
+    
+    @PreUpdate
+    public void preUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
 }
-

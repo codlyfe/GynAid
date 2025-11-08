@@ -5,68 +5,49 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.UpdateTimestamp;
-
 import java.time.LocalDateTime;
 
-/**
- * Medical vitals tracking for clients.
- * All fields nullable for gradual profile completion.
- */
+@Entity
+@Table(name = "medical_vitals")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Entity
-@Table(name = "medical_vitals")
 public class MedicalVitals {
-
+    
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
+    
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "health_profile_id", nullable = false, unique = true)
+    @JoinColumn(name = "health_profile_id", nullable = false)
     private ClientHealthProfile healthProfile;
-
-    // Basic vitals
+    
     @Column(name = "height_cm")
     private Double heightCm;
-
+    
     @Column(name = "weight_kg")
     private Double weightKg;
-
-    @Column(name = "blood_group")
-    private String bloodGroup; // A+, A-, B+, B-, AB+, AB-, O+, O-
-
-    // Blood pressure tracking (stored as JSON or separate table for history)
-    @Column(name = "systolic_bp")
-    private Integer systolicBp;
-
-    @Column(name = "diastolic_bp")
-    private Integer diastolicBp;
-
-    @Column(name = "last_bp_reading_date")
-    private LocalDateTime lastBpReadingDate;
-
-    // BMI (calculated field, but stored for quick access)
-    @Column(name = "bmi")
-    private Double bmi;
-
-    @UpdateTimestamp
+    
+    @Column(name = "blood_pressure_systolic")
+    private Integer bloodPressureSystolic;
+    
+    @Column(name = "blood_pressure_diastolic")
+    private Integer bloodPressureDiastolic;
+    
+    @Column(name = "blood_type")
+    private String bloodType;
+    
+    @Column(name = "created_at")
+    @Builder.Default
+    private LocalDateTime createdAt = LocalDateTime.now();
+    
     @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
-
-    /**
-     * Calculates BMI if height and weight are available.
-     */
+    @Builder.Default
+    private LocalDateTime updatedAt = LocalDateTime.now();
+    
     @PreUpdate
-    @PrePersist
-    public void calculateBMI() {
-        if (heightCm != null && weightKg != null && heightCm > 0) {
-            double heightInMeters = heightCm / 100.0;
-            this.bmi = weightKg / (heightInMeters * heightInMeters);
-        }
+    public void preUpdate() {
+        this.updatedAt = LocalDateTime.now();
     }
 }
-

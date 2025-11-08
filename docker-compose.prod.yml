@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  gynassist-db:
+    image: postgres:15-alpine
+    container_name: gynassist-db-prod
+    environment:
+      POSTGRES_DB: gynassist_prod
+      POSTGRES_USER: ${DATABASE_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+    volumes:
+      - gynassist_db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - gynassist-network
+
+  gynassist-backend:
+    build:
+      context: ./Gynassist-backend
+      dockerfile: Dockerfile
+    container_name: gynassist-backend-prod
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DATABASE_URL: jdbc:postgresql://gynassist-db:5432/gynassist_prod
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-postgres}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      MOH_API_URL: ${MOH_API_URL}
+      MOH_API_KEY: ${MOH_API_KEY}
+    ports:
+      - "8080:8080"
+    depends_on:
+      - gynassist-db
+    restart: unless-stopped
+    networks:
+      - gynassist-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  gynassist-frontend:
+    build:
+      context: ./gynassist-frontend
+      dockerfile: Dockerfile
+    container_name: gynassist-frontend-prod
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - gynassist-backend
+    restart: unless-stopped
+    networks:
+      - gynassist-network
+
+volumes:
+  gynassist_db_data:
+
+networks:
+  gynassist-network:
+    driver: bridge

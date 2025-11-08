@@ -1,11 +1,17 @@
 const { app, BrowserWindow, Menu, Tray, shell, ipcMain, dialog, Notification } = require('electron');
 const path = require('path');
-const isDev = require('electron-is-dev');
-const { autoUpdater } = require('electron-updater');
-const Store = require('electron-store');
 
-// Initialize electron store
-const store = new Store();
+// Check if in development mode
+let isDev = false;
+app.whenReady().then(() => {
+  isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+});
+// Simple storage fallback
+const store = {
+  get: (key) => null,
+  set: (key, value) => {},
+  delete: (key) => {}
+};
 
 let mainWindow;
 let tray;
@@ -13,10 +19,14 @@ let isQuitting = false;
 
 // Enable live reload for Electron in development
 if (isDev) {
-  require('electron-reload')(__dirname, {
-    electron: path.join(__dirname, '..', 'node_modules', '.bin', 'electron'),
-    hardResetMethod: 'exit'
-  });
+  try {
+    require('electron-reload')(__dirname, {
+      electron: path.join(__dirname, '..', 'node_modules', '.bin', 'electron'),
+      hardResetMethod: 'exit'
+    });
+  } catch (e) {
+    console.log('Electron reload not available');
+  }
 }
 
 function createWindow() {
@@ -39,7 +49,7 @@ function createWindow() {
 
   // Load the app
   const startUrl = isDev 
-    ? 'http://localhost:3000' 
+    ? 'http://localhost:5173' 
     : `file://${path.join(__dirname, '../build/index.html')}`;
   
   mainWindow.loadURL(startUrl);
@@ -246,7 +256,7 @@ function createMenu() {
               type: 'info',
               title: 'About Gynassist',
               message: 'Gynassist Desktop',
-              detail: 'Reproductive Health Companion for Women\\nVersion 1.0.0\\n\\nEmpowering women\\'s health across Uganda 🇺🇬'
+              detail: 'Reproductive Health Companion for Women\nVersion 1.0.0\n\nEmpowering women\'s health across Uganda 🇺🇬'
             });
           }
         },
@@ -287,10 +297,7 @@ app.whenReady().then(() => {
   createTray();
   createMenu();
   
-  // Check for updates
-  if (!isDev) {
-    autoUpdater.checkForUpdatesAndNotify();
-  }
+  // Auto-updater disabled for simplicity
 });
 
 app.on('window-all-closed', () => {
@@ -356,31 +363,4 @@ ipcMain.handle('open-external', (event, url) => {
   shell.openExternal(url);
 });
 
-// Auto updater events
-autoUpdater.on('checking-for-update', () => {
-  console.log('Checking for update...');
-});
-
-autoUpdater.on('update-available', (info) => {
-  console.log('Update available.');
-});
-
-autoUpdater.on('update-not-available', (info) => {
-  console.log('Update not available.');
-});
-
-autoUpdater.on('error', (err) => {
-  console.log('Error in auto-updater. ' + err);
-});
-
-autoUpdater.on('download-progress', (progressObj) => {
-  let log_message = "Download speed: " + progressObj.bytesPerSecond;
-  log_message = log_message + ' - Downloaded ' + progressObj.percent + '%';
-  log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')';
-  console.log(log_message);
-});
-
-autoUpdater.on('update-downloaded', (info) => {
-  console.log('Update downloaded');
-  autoUpdater.quitAndInstall();
-});
+// Auto-updater functionality removed for stability
