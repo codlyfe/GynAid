@@ -1,0 +1,95 @@
+{
+  "expo": {
+    "name": "Gynassist",
+    "slug": "gynassist-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gynassist.mobile",
+      "infoPlist": {
+        "NSHealthShareUsageDescription": "This app needs access to health data to track your reproductive health.",
+        "NSHealthUpdateUsageDescription": "This app needs to update health data to save your reproductive health information.",
+        "NSCameraUsageDescription": "This app needs camera access to capture medical documents.",
+        "NSMicrophoneUsageDescription": "This app needs microphone access for voice commands and consultations.",
+        "NSLocationWhenInUseUsageDescription": "This app needs location access to find nearby healthcare providers.",
+        "NSCalendarsUsageDescription": "This app needs calendar access to schedule appointments."
+      },
+      "capabilities": [
+        "HealthKit"
+      ]
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.gynassist.mobile",
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "READ_CALENDAR",
+        "WRITE_CALENDAR",
+        "VIBRATE",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#ffffff",
+          "sounds": [
+            "./assets/notification-sound.wav"
+          ]
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Gynassist to use Face ID for secure authentication."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Gynassist to access your camera to capture medical documents."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Gynassist to use your location to find nearby healthcare providers."
+        }
+      ]
+    ],
+    "scheme": "gynassist",
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "gynassist-mobile-project-id"
+      }
+    }
+  }
+}

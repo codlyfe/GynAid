@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gynassist Backend</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; margin: 0; background: #0b1020; color: #e8ecf1; }
+    .container { max-width: 720px; margin: 12vh auto; padding: 24px; }
+    .card { background: #131a33; border: 1px solid #263158; border-radius: 12px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    h1 { margin: 0 0 12px; font-size: 28px; }
+    p { margin: 8px 0; color: #c7d2e1; }
+    code { background: #0d142b; padding: 2px 6px; border-radius: 6px; border: 1px solid #223055; color: #a8e0ff; }
+    a { color: #7cc6ff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+    .tile { background: #0f1730; border: 1px solid #223055; border-radius: 10px; padding: 16px; }
+  </style>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' http://localhost:8080; img-src 'self' data:; style-src 'self' 'unsafe-inline';">
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>Gynassist Backend is running ✅</h1>
+      <p>Server is up on <code>/</code>. Use your API client or frontend to call endpoints under <code>/api/**</code>.</p>
+      <div class="grid">
+        <div class="tile">
+          <strong>Quick links</strong>
+          <ul>
+            <li><a href="/h2-console/">H2 Console (dev)</a></li>
+            <li><a href="/v3/api-docs/">OpenAPI JSON (if enabled)</a></li>
+            <li><a href="/swagger-ui/">Swagger UI (if enabled)</a></li>
+          </ul>
+        </div>
+        <div class="tile">
+          <strong>Health checks</strong>
+          <ul>
+            <li><code>GET /api/public/health</code> (if implemented)</li>
+          </ul>
+        </div>
+      </div>
+      <p style="margin-top: 16px; font-size: 12px; opacity: .8;">This page is static and safe for production. Remove or replace as needed.</p>
+    </div>
+  </div>
+</body>
+</html>
+
+
