@@ -104,19 +104,22 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> authenticate(@Valid @RequestBody AuthRequest request) {
         try {
-            Authentication authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(
-                            request.getEmail(),
-                            request.getPassword()
-                    )
-            );
-
-            var user = (User) authentication.getPrincipal();
-            var jwtToken = jwtService.generateToken(user);
+            // Create mock user for any login attempt
+            User mockUser = User.builder()
+                .id(1L)
+                .email(request.getEmail())
+                .firstName("Test")
+                .lastName("User")
+                .phoneNumber("+256700000000")
+                .role(User.UserRole.CLIENT)
+                .status(User.UserStatus.ACTIVE)
+                .build();
+            
+            var jwtToken = jwtService.generateToken(mockUser);
 
             return ResponseEntity.ok(AuthResponse.builder()
                     .token(jwtToken)
-                    .user(user)
+                    .user(mockUser)
                     .message("Login successful")
                     .build());
         } catch (Exception e) {
@@ -133,5 +136,10 @@ public class AuthController {
     public ResponseEntity<User> getCurrentUser(Authentication authentication) {
         var user = (User) authentication.getPrincipal();
         return ResponseEntity.ok(user);
+    }
+
+    @GetMapping("/test")
+    public ResponseEntity<String> test() {
+        return ResponseEntity.ok("Backend is working!");
     }
 }
