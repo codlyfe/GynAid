@@ -50,4 +50,22 @@ public class MedicalVitals {
     public void preUpdate() {
         this.updatedAt = LocalDateTime.now();
     }
+    
+    // Computed BMI calculation
+    public Double getBmi() {
+        if (heightCm != null && weightKg != null && heightCm > 0) {
+            double heightM = heightCm / 100.0;
+            return Math.round((weightKg / (heightM * heightM)) * 10.0) / 10.0;
+        }
+        return null;
+    }
+    
+    public String getBmiCategory() {
+        Double bmi = getBmi();
+        if (bmi == null) return "Unknown";
+        if (bmi < 18.5) return "Underweight";
+        if (bmi < 25.0) return "Normal";
+        if (bmi < 30.0) return "Overweight";
+        return "Obese";
+    }
 }

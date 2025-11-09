@@ -8,6 +8,7 @@ import com.gynassist.backend.entity.User;
 import com.gynassist.backend.security.JwtService;
 import com.gynassist.backend.service.UserService;
 import com.gynassist.backend.util.LocationUtils;
+
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.locationtech.jts.geom.Point;
@@ -40,23 +41,22 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@RequestBody RegisterRequest request) {
         try {
-            System.out.println("=== REGISTRATION DEBUG START ===");
-            System.out.println("Email: " + request.getEmail());
-            System.out.println("FirstName: " + request.getFirstName());
-            System.out.println("LastName: " + request.getLastName());
-            System.out.println("PhoneNumber: " + request.getPhoneNumber());
-            System.out.println("Role: " + request.getRole());
-            System.out.println("=== REGISTRATION DEBUG END ===");
-        if (userService.userExists(request.getEmail())) {
-            return ResponseEntity.badRequest()
-                .body(AuthResponse.builder()
-                    .message("User already exists with this email")
-                    .build());
-        }
 
-        var user = User.builder()
+            
+            // Check if user already exists
+            if (userService.userExists(request.getEmail())) {
+                return ResponseEntity.badRequest()
+                    .body(AuthResponse.builder()
+                        .message("User already exists with this email")
+                        .build());
+            }
+
+            // Create user with validated data
+            String hashedPassword = passwordEncoder.encode(request.getPassword());
+            
+            User user = User.builder()
                 .email(request.getEmail())
-                .password(passwordEncoder.encode(request.getPassword()))
+                .password(hashedPassword)
                 .firstName(request.getFirstName())
                 .lastName(request.getLastName())
                 .phoneNumber(request.getPhoneNumber())
@@ -65,37 +65,35 @@ public class AuthController {
                 .profileCompletionStatus(User.ProfileCompletionStatus.BASIC_COMPLETE)
                 .build();
 
-        if (request.getLocation() != null) {
-            Point point = LocationUtils.toPoint(
-                request.getLocation().getLatitude(),
-                request.getLocation().getLongitude()
-            );
+            // Handle location if provided
+            if (request.getLocation() != null) {
+                Point point = LocationUtils.toPoint(
+                    request.getLocation().getLatitude(),
+                    request.getLocation().getLongitude()
+                );
 
-            ProviderLocation location = new ProviderLocation(
-                null, // id
-                user, // provider
-                point, // currentLocation
-                ProviderLocation.AvailabilityStatus.OFFLINE,
-                null, // currentActivity
-                LocalDateTime.now(), // lastUpdated
-                null, // accuracy
-                ProviderLocation.ServiceType.IMMEDIATE_CONSULTATION
-            );
+                ProviderLocation location = new ProviderLocation();
+                location.setProvider(user);
+                location.setCurrentLocation(point);
+                location.setAvailabilityStatus(ProviderLocation.AvailabilityStatus.OFFLINE);
+                location.setLastUpdated(LocalDateTime.now());
+                location.setServiceType(ProviderLocation.ServiceType.IMMEDIATE_CONSULTATION);
 
-            user.setCurrentLocation(location);
-        }
+                user.setCurrentLocation(location);
+            }
 
-        var savedUser = userService.saveUser(user);
-        var jwtToken = jwtService.generateToken(savedUser);
+            var savedUser = userService.saveUser(user);
+            var jwtToken = jwtService.generateToken(savedUser);
 
-        return ResponseEntity.ok(AuthResponse.builder()
-                .token(jwtToken)
-                .user(savedUser)
-                .message("User registered successfully")
-                .build());
+            String message = "User registered successfully";
+
+            return ResponseEntity.ok(AuthResponse.builder()
+                    .token(jwtToken)
+                    .user(savedUser)
+                    .message(message)
+                    .build());
+                    
         } catch (Exception e) {
-            System.out.println("Registration error: " + e.getMessage());
-            e.printStackTrace();
             return ResponseEntity.badRequest()
                 .body(AuthResponse.builder()
                     .message("Registration failed: " + e.getMessage())
@@ -105,21 +103,30 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> authenticate(@Valid @RequestBody AuthRequest request) {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        request.getEmail(),
-                        request.getPassword()
-                )
-        );
+        try {
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            request.getEmail(),
+                            request.getPassword()
+                    )
+            );
 
-        var user = (User) authentication.getPrincipal();
-        var jwtToken = jwtService.generateToken(user);
+            var user = (User) authentication.getPrincipal();
+            var jwtToken = jwtService.generateToken(user);
 
-        return ResponseEntity.ok(AuthResponse.builder()
-                .token(jwtToken)
-                .user(user)
-                .message("Login successful")
-                .build());
+            return ResponseEntity.ok(AuthResponse.builder()
+                    .token(jwtToken)
+                    .user(user)
+                    .message("Login successful")
+                    .build());
+        } catch (Exception e) {
+            System.out.println("Login error: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.badRequest()
+                .body(AuthResponse.builder()
+                    .message("Login failed: " + e.getMessage())
+                    .build());
+        }
     }
 
     @GetMapping("/me")

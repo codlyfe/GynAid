@@ -48,6 +48,12 @@ public class ClientHealthProfile {
     @OneToOne(mappedBy = "healthProfile", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private GynecologicalProfile gynecologicalProfile;
     
+    @OneToOne(mappedBy = "healthProfile", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private MedicalVitals medicalVitals;
+    
+    @OneToOne(mappedBy = "healthProfile", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private MedicalHistory medicalHistory;
+    
     @PreUpdate
     public void preUpdate() {
         this.updatedAt = LocalDateTime.now();
