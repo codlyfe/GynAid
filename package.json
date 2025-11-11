@@ -1,38 +1,38 @@
 {
-  "name": "gynassist-cross-platform",
+  "name": "GynaId-cross-platform",
   "version": "1.0.0",
-  "description": "Gynassist - Cross-Platform Reproductive Health Application",
+  "description": "GynaId - Cross-Platform Reproductive Health Application",
   "private": true,
   "scripts": {
     "start:all": "node scripts/start-all.js",
-    "start:backend": "cd Gynassist-backend && ./mvnw spring-boot:run",
-    "start:frontend": "cd gynassist-frontend && npm run dev",
-    "start:mobile": "cd gynassist-mobile && npx expo start",
-    "start:desktop": "cd gynassist-desktop && npm run dev",
+    "start:backend": "cd GynAid-backend && ./mvnw spring-boot:run",
+    "start:frontend": "cd GynAid-frontend && npm run dev",
+    "start:mobile": "cd GynAid-mobile && npx expo start",
+    "start:desktop": "cd GynAid-desktop && npm run dev",
     "install:all": "npm run install:frontend && npm run install:mobile && npm run install:desktop",
-    "install:frontend": "cd gynassist-frontend && npm install",
-    "install:mobile": "cd gynassist-mobile && npm install",
-    "install:desktop": "cd gynassist-desktop && npm install",
+    "install:frontend": "cd GynAid-frontend && npm install",
+    "install:mobile": "cd GynAid-mobile && npm install",
+    "install:desktop": "cd GynAid-desktop && npm install",
     "build:all": "npm run build:frontend && npm run build:mobile && npm run build:desktop",
-    "build:frontend": "cd gynassist-frontend && npm run build",
-    "build:mobile": "cd gynassist-mobile && eas build --platform all",
-    "build:desktop": "cd gynassist-desktop && npm run build",
+    "build:frontend": "cd GynAid-frontend && npm run build",
+    "build:mobile": "cd GynAid-mobile && eas build --platform all",
+    "build:desktop": "cd GynAid-desktop && npm run build",
     "test:all": "npm run test:frontend && npm run test:mobile && npm run test:desktop && npm run test:backend",
-    "test:frontend": "cd gynassist-frontend && npm test",
-    "test:mobile": "cd gynassist-mobile && npm test",
-    "test:desktop": "cd gynassist-desktop && npm test",
-    "test:backend": "cd Gynassist-backend && ./mvnw test",
+    "test:frontend": "cd GynAid-frontend && npm test",
+    "test:mobile": "cd GynAid-mobile && npm test",
+    "test:desktop": "cd GynAid-desktop && npm test",
+    "test:backend": "cd GynAid-backend && ./mvnw test",
     "lint:all": "npm run lint:frontend && npm run lint:mobile && npm run lint:desktop",
-    "lint:frontend": "cd gynassist-frontend && npm run lint",
-    "lint:mobile": "cd gynassist-mobile && npx expo lint",
-    "lint:desktop": "cd gynassist-desktop && npm run lint",
+    "lint:frontend": "cd GynAid-frontend && npm run lint",
+    "lint:mobile": "cd GynAid-mobile && npx expo lint",
+    "lint:desktop": "cd GynAid-desktop && npm run lint",
     "clean:all": "npm run clean:frontend && npm run clean:mobile && npm run clean:desktop && npm run clean:backend",
-    "clean:frontend": "cd gynassist-frontend && rm -rf node_modules dist",
-    "clean:mobile": "cd gynassist-mobile && rm -rf node_modules .expo",
-    "clean:desktop": "cd gynassist-desktop && rm -rf node_modules build dist",
-    "clean:backend": "cd Gynassist-backend && ./mvnw clean",
+    "clean:frontend": "cd GynAid-frontend && rm -rf node_modules dist",
+    "clean:mobile": "cd GynAid-mobile && rm -rf node_modules .expo",
+    "clean:desktop": "cd GynAid-desktop && rm -rf node_modules build dist",
+    "clean:backend": "cd GynAid-backend && ./mvnw clean",
     "setup": "npm run install:all && npm run setup:mobile",
-    "setup:mobile": "cd gynassist-mobile && npx expo install",
+    "setup:mobile": "cd GynAid-mobile && npx expo install",
     "dev": "npm run start:all",
     "deploy": "node scripts/deploy.js",
     "deploy:web": "node scripts/deploy.js web",
@@ -44,12 +44,12 @@
     "health-check": "node scripts/health-check.js",
     "postinstall": "echo 'Run npm run setup to install all dependencies'",
     "launch": "node scripts/create-desktop-shortcuts.js",
-    "launch:windows": "Launch-Gynassist.bat"
+    "launch:windows": "Launch-GynAid.bat"
   },
   "workspaces": [
-    "gynassist-frontend",
-    "gynassist-mobile",
-    "gynassist-desktop",
+    "GynAid-frontend",
+    "GynAid-mobile",
+    "GynAid-desktop",
     "shared"
   ],
   "devDependencies": {
@@ -62,7 +62,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/gynassist/gynassist-app.git"
+    "url": "https://github.com/GynaId/GynaId-app.git"
   },
   "keywords": [
     "healthcare",
@@ -75,13 +75,14 @@
     "electron",
     "spring-boot"
   ],
-  "author": "Gynassist Team",
+  "author": "GynaId Team",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/gynassist/gynassist-app/issues"
+    "url": "https://github.com/GynaId/GynaId-app/issues"
   },
-  "homepage": "https://gynassist.ug",
+  "homepage": "https://GynaId.ug",
   "dependencies": {
     "axios": "^1.13.2"
   }
 }
+

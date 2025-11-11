@@ -1,5 +1,5 @@
 @echo off
-title Gynassist - Reproductive Health Companion
+title GynaId - Reproductive Health Companion
 color 0A
 :MAIN_MENU
 cls
@@ -39,7 +39,7 @@ goto MAIN_MENU
 
 :QUICK_START
 cls
-echo 🚀 Starting Gynassist Cross-Platform Application...
+echo 🚀 Starting GynaId Cross-Platform Application...
 echo.
 
 REM Check Node.js
@@ -52,7 +52,7 @@ if %errorlevel% neq 0 (
 
 REM Check project directory
 if not exist "package.json" (
-    echo ❌ package.json not found. Run from Gynassist directory.
+    echo ❌ package.json not found. Run from GynaId directory.
     pause
     goto MAIN_MENU
 )
@@ -97,19 +97,19 @@ call ./mvnw clean
 rmdir /s /q target 2>nul
 
 echo Cleaning frontend...
-cd ../gynassist-frontend
+cd ../Gynassist-frontend
 rmdir /s /q node_modules 2>nul
 rmdir /s /q dist 2>nul
 rmdir /s /q .vite 2>nul
 call npm cache clean --force
 
 echo Cleaning mobile...
-cd ../gynassist-mobile
+cd ../Gynassist-mobile
 rmdir /s /q node_modules 2>nul
 rmdir /s /q .expo 2>nul
 
 echo Cleaning desktop...
-cd ../gynassist-desktop
+cd ../Gynassist-desktop
 rmdir /s /q node_modules 2>nul
 rmdir /s /q build 2>nul
 rmdir /s /q dist 2>nul
@@ -149,7 +149,7 @@ echo Waiting for startup...
 timeout /t 20
 
 echo Starting frontend...
-cd ..\gynassist-frontend
+cd ..\Gynassist-frontend
 start "Frontend" cmd /k "npm run dev"
 
 cd ..
@@ -199,7 +199,7 @@ java -version 2>nul && echo ✅ Java: Available || echo ❌ Java: Not found
 echo Checking project structure...
 if exist "package.json" (echo ✅ Project: Valid) else (echo ❌ Project: Invalid directory)
 if exist "Gynassist-backend" (echo ✅ Backend: Found) else (echo ❌ Backend: Missing)
-if exist "gynassist-frontend" (echo ✅ Frontend: Found) else (echo ❌ Frontend: Missing)
+if exist "Gynassist-frontend" (echo ✅ Frontend: Found) else (echo ❌ Frontend: Missing)
 
 echo Checking dependencies...
 if exist "node_modules" (echo ✅ Dependencies: Installed) else (echo ❌ Dependencies: Missing)
@@ -214,7 +214,7 @@ goto MAIN_MENU
 
 :EXIT
 echo.
-echo Thank you for using Gynassist! 👋
+echo Thank you for using GynaId! 👋
 echo.
 timeout /t 2 > nul
 exit /b 0

@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Gynassist AI Platform Deployment Script
-echo "🚀 Deploying Gynassist AI Platform..."
+# GynaId AI Platform Deployment Script
+echo "🚀 Deploying GynaId AI Platform..."
 
 # Set environment variables
 export DATABASE_PASSWORD=${DATABASE_PASSWORD:-"secure_password_123"}
@@ -11,13 +11,13 @@ export MOH_API_KEY=${MOH_API_KEY:-"your_moh_api_key"}
 
 # Build backend
 echo "📦 Building AI-enhanced backend..."
-cd Gynassist-backend
+cd GynaId-backend
 ./mvnw clean package -DskipTests
 cd ..
 
 # Build frontend
 echo "🎨 Building frontend..."
-cd gynassist-frontend
+cd GynaId-frontend
 npm install
 npm run build
 cd ..
@@ -36,7 +36,7 @@ echo "🏥 Checking service health..."
 curl -f http://localhost:8080/actuator/health || echo "❌ Backend health check failed"
 curl -f http://localhost || echo "❌ Frontend health check failed"
 
-echo "✅ Gynassist AI Platform deployed successfully!"
+echo "✅ GynaId AI Platform deployed successfully!"
 echo "🌐 Frontend: http://localhost"
 echo "🔧 Backend API: http://localhost:8080"
 echo "📊 Health Check: http://localhost:8080/actuator/health"

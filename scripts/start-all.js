@@ -3,7 +3,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
 
-console.log('🚀 Starting Gynassist Application Suite...\n');
+console.log('🚀 Starting GynaId Application Suite...\n');
 
 // Colors for console output
 const colors = {
@@ -27,7 +27,7 @@ function startBackend() {
   log('BACKEND', 'Starting Spring Boot application...', 'blue');
 
   const backendProcess = spawn('mvnw.cmd', ['spring-boot:run'], {
-    cwd: path.join(__dirname, '..', 'Gynassist-backend'),
+    cwd: path.join(__dirname, '..', 'GynAid-backend'),
     stdio: 'inherit',
     shell: true
   });
@@ -48,7 +48,7 @@ function startFrontend() {
   log('FRONTEND', 'Starting React development server...', 'green');
 
   const frontendProcess = spawn('npm', ['run', 'dev'], {
-    cwd: path.join(__dirname, '..', 'gynassist-frontend'),
+    cwd: path.join(__dirname, '..', 'GynAid-frontend'),
     stdio: 'inherit',
     shell: true
   });

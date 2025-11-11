@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/Gynassist.iml" filepath="$PROJECT_DIR$/.idea/Gynassist.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/GynaId.iml" filepath="$PROJECT_DIR$/.idea/GynaId.iml" />
     </modules>
   </component>
 </project>

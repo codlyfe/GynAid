@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * GYNASSIST COMPREHENSIVE DIAGNOSTICS TOOL
+ * GynaId COMPREHENSIVE DIAGNOSTICS TOOL
  * Consolidates all testing, debugging, and validation functionality
  */
 
@@ -9,7 +9,7 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
-class GynassistDiagnostics {
+class GynaIdDiagnostics {
     constructor() {
         this.baseURL = 'http://localhost:8080';
         this.frontendURL = 'http://localhost:5173';
@@ -23,7 +23,7 @@ class GynassistDiagnostics {
     }
 
     async runDiagnostics(mode = 'full') {
-        console.log('🔍 GYNASSIST COMPREHENSIVE DIAGNOSTICS\n');
+        console.log('🔍 GynaId COMPREHENSIVE DIAGNOSTICS\n');
         
         switch (mode) {
             case 'connectivity':
@@ -352,8 +352,8 @@ class GynassistDiagnostics {
         }
         
         // Save report
-        fs.writeFileSync('gynassist-diagnostic-report.json', JSON.stringify(this.results, null, 2));
-        console.log('\n📄 Report saved to: gynassist-diagnostic-report.json');
+        fs.writeFileSync('Gynassist-diagnostic-report.json', JSON.stringify(this.results, null, 2));
+        console.log('\n📄 Report saved to: Gynassist-diagnostic-report.json');
         
         console.log('\n🔗 Quick Links:');
         console.log('   - Frontend: http://localhost:5173');
@@ -367,7 +367,7 @@ async function main() {
     const args = process.argv.slice(2);
     const mode = args[0] || 'full';
     
-    const diagnostics = new GynassistDiagnostics();
+    const diagnostics = new GynaIdDiagnostics();
     
     console.log('Available modes: full, connectivity, auth, schema, recovery\n');
     
@@ -382,4 +382,4 @@ if (require.main === module) {
     main();
 }
 
-module.exports = GynassistDiagnostics;
+module.exports = GynaIdDiagnostics;
