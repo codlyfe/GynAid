@@ -33,20 +33,9 @@ public interface HealthcareProviderRepository extends JpaRepository<HealthcarePr
            "ORDER BY p.rating DESC, p.reviewCount DESC")
     List<HealthcareProvider> findByDistrict(@Param("district") String district);
 
-    // Find by multiple specializations
-    @Query("SELECT DISTINCT p FROM HealthcareProvider p " +
-           "WHERE EXISTS (SELECT s FROM HealthcareProvider.Specialization s WHERE s MEMBER OF p.specializations AND s IN :specializations) " +
-           "AND p.verificationStatus = 'VERIFIED' " +
-           "ORDER BY " +
-           "CASE p.scope " +
-           "WHEN 'UGANDA' THEN 1 " +
-           "WHEN 'EAST_AFRICA' THEN 2 " +
-           "WHEN 'AFRICA' THEN 3 " +
-           "WHEN 'GLOBAL' THEN 4 " +
-           "END, p.rating DESC")
-    Page<HealthcareProvider> findBySpecializations(
-        @Param("specializations") List<HealthcareProvider.Specialization> specializations, 
-        Pageable pageable);
+    // Find by multiple specializations - FIXED VERSION
+    @Query("SELECT DISTINCT hp FROM HealthcareProvider hp JOIN hp.specializations s WHERE s IN :specializations")
+    Page<HealthcareProvider> findBySpecializationsIn(@Param("specializations") List<HealthcareProvider.Specialization> specializations, Pageable pageable);
 
     // Geographic search with radius (for location-based search)
     @Query(value = "SELECT * FROM healthcare_providers p WHERE " +

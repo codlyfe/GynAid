@@ -34,7 +34,7 @@ public class HealthcareProviderService {
             int page,
             int size) {
         Pageable pageable = PageRequest.of(page, size);
-        return providerRepository.findBySpecializations(specializations, pageable);
+        return providerRepository.findBySpecializationsIn(specializations, pageable);
     }
 
     // Location-based search

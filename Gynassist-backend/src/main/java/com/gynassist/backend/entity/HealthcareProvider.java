@@ -22,6 +22,10 @@ public class HealthcareProvider {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "user_id", nullable = true)
+    private User user;
+
     @Column(nullable = false)
     private String name;
 
@@ -44,7 +48,7 @@ public class HealthcareProvider {
     @CollectionTable(name = "provider_specializations")
     private List<Specialization> specializations;
 
-    @Column(columnDefinition = "geometry(Point,4326)")
+    @Column(columnDefinition = "BLOB")
     private Point location;
 
     private String address;
