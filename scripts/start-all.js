@@ -3,7 +3,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
 
-console.log('🚀 Starting GynaId Application Suite...\n');
+console.log('🚀 Starting GynAid Application Suite...\n');
 
 // Colors for console output
 const colors = {

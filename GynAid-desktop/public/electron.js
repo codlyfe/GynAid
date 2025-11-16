@@ -78,7 +78,7 @@ function createWindow() {
       // Show notification
       if (Notification.isSupported()) {
         new Notification({
-          title: 'GynaId',
+          title: 'GynAid',
           body: 'App was minimized to tray',
           icon: path.join(__dirname, '../assets/icon.png')
         }).show();
@@ -99,7 +99,7 @@ function createTray() {
   
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Show GynaId',
+      label: 'Show GynAid',
       click: () => {
         mainWindow.show();
         mainWindow.focus();
@@ -140,7 +140,7 @@ function createTray() {
     }
   ]);
   
-  tray.setToolTip('GynaId - Reproductive Health Companion');
+  tray.setToolTip('GynAid - Reproductive Health Companion');
   tray.setContextMenu(contextMenu);
   
   // Double click to show window
@@ -168,7 +168,7 @@ function createMenu() {
           accelerator: 'CmdOrCtrl+E',
           click: async () => {
             const result = await dialog.showSaveDialog(mainWindow, {
-              defaultPath: 'GynaId-data.json',
+              defaultPath: 'GynAid-data.json',
               filters: [
                 { name: 'JSON Files', extensions: ['json'] },
                 { name: 'All Files', extensions: ['*'] }
@@ -250,12 +250,12 @@ function createMenu() {
       role: 'help',
       submenu: [
         {
-          label: 'About GynaId',
+          label: 'About GynAid',
           click: () => {
             dialog.showMessageBox(mainWindow, {
               type: 'info',
-              title: 'About GynaId',
-              message: 'GynaId Desktop',
+              title: 'About GynAid',
+              message: 'GynAid Desktop',
               detail: 'Reproductive Health Companion for Women\nVersion 1.0.0\n\nEmpowering women\'s health across Uganda 🇺🇬'
             });
           }
@@ -263,7 +263,7 @@ function createMenu() {
         {
           label: 'Learn More',
           click: () => {
-            shell.openExternal('https://GynaId.ug');
+            shell.openExternal('https://GynAid.ug');
           }
         }
       ]

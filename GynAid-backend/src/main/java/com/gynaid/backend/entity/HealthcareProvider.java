@@ -5,6 +5,9 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.BatchSize;
+import org.hibernate.annotations.Fetch;
+import org.hibernate.annotations.FetchMode;
 import org.locationtech.jts.geom.Point;
 
 import java.time.LocalDateTime;
@@ -46,6 +49,8 @@ public class HealthcareProvider {
     @ElementCollection(targetClass = Specialization.class)
     @Enumerated(EnumType.STRING)
     @CollectionTable(name = "provider_specializations")
+    @BatchSize(size = 25)
+    @Fetch(FetchMode.SUBSELECT)
     private List<Specialization> specializations;
 
     @Column(columnDefinition = "BLOB")
@@ -69,26 +74,20 @@ public class HealthcareProvider {
     @Enumerated(EnumType.STRING)
     private AvailabilityStatus availabilityStatus;
 
-    public void setVerificationStatus(VerificationStatus verificationStatus) {
-        this.verificationStatus = verificationStatus;
-    }
-
-    public void setAvailabilityStatus(AvailabilityStatus availabilityStatus) {
-        this.availabilityStatus = availabilityStatus;
-    }
-
     private Double rating;
     private Integer reviewCount;
 
     @Column(name = "consultation_fee")
     private Double consultationFee;
 
-    @ElementCollection
+    @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "provider_languages")
+    @BatchSize(size = 25)
     private List<String> languages;
 
-    @ElementCollection
+    @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "provider_services")
+    @BatchSize(size = 25)
     private List<String> services;
 
     private LocalDateTime createdAt;

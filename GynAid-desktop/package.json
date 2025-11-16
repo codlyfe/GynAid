@@ -1,5 +1,5 @@
 {
-  "name": "GynaId-desktop",
+  "name": "GynAid-desktop",
   "version": "1.0.0",
   "main": "main-simple.js",
   "scripts": {
@@ -22,8 +22,8 @@
     "electron-builder": "^24.13.3"
   },
   "build": {
-    "appId": "com.GynaId.desktop",
-    "productName": "GynaId Desktop",
+    "appId": "com.gynaid.desktop",
+    "productName": "GynAid Desktop",
     "directories": {
       "output": "dist"
     },

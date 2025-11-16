@@ -17,10 +17,10 @@ public class DataInitializer implements CommandLineRunner {
     @Override
     public void run(String... args) throws Exception {
         // Create default test user if not exists
-        if (!userService.userExists("test@GynaId.com")) {
+        if (!userService.userExists("test@GynAid.com")) {
             User testUser = User.builder()
-                .email("test@GynaId.com")
-                .password(passwordEncoder.encode("password123"))
+                .email("test@GynAid.com")
+                .password(passwordEncoder.encode("TestPassword123!"))
                 .firstName("Test")
                 .lastName("User")
                 .phoneNumber("+256700000000")
@@ -30,7 +30,7 @@ public class DataInitializer implements CommandLineRunner {
                 .build();
             
             userService.saveUser(testUser);
-            System.out.println("Created test user: test@GynaId.com / password123");
+            System.out.println("Created test user: test@GynAid.com / TestPassword123!");
         }
     }
 }

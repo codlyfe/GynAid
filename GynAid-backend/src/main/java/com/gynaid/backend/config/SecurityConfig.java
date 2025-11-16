@@ -1,6 +1,7 @@
 package com.gynaid.backend.config;
 
 import com.gynaid.backend.security.JwtAuthenticationFilter;
+import com.gynaid.backend.security.RateLimitingFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -32,42 +33,136 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthFilter;
+    private final RateLimitingFilter rateLimitingFilter;
     private final UserDetailsService userDetailsService;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter, UserDetailsService userDetailsService) {
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter, RateLimitingFilter rateLimitingFilter, UserDetailsService userDetailsService) {
         this.jwtAuthFilter = jwtAuthFilter;
+        this.rateLimitingFilter = rateLimitingFilter;
         this.userDetailsService = userDetailsService;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .csrf(csrf -> csrf.disable())
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/**", "/h2-console/**", "/actuator/**", "/error").permitAll()
-                .anyRequest().permitAll()
+            // 🔒 SECURITY: Enable CSRF protection (was disabled - CRITICAL VULNERABILITY)
+            .csrf(csrf -> csrf
+                .csrfTokenRepository(createCsrfTokenRepository())
+                .ignoringRequestMatchers("/api/webhooks/**", "/api/auth/login", "/api/auth/register", "/h2-console/**")
             )
-            .authenticationProvider(authenticationProvider())
-            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
-
-        // For H2 console in development
-        http.headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()));
+            
+            // 🔒 CORS Configuration - Secure allowed origins
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            
+            // 🔒 Session Management - Stateless with secure session handling
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            
+            // 🔒 Authorization Rules - Default to authentication required
+            .authorizeHttpRequests(auth -> auth
+                // Public endpoints - authentication not required
+                .requestMatchers(
+                    "/api/auth/login",
+                    "/api/auth/register",
+                    "/api/auth/verify-email",
+                    "/api/auth/reset-password",
+                    "/api/health",
+                    "/api/webhooks/**",
+                    "/actuator/health",
+                    "/error",
+                    "/h2-console/**"
+                ).permitAll()
+                
+                // 🔒 Protected endpoints - authentication required
+                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/provider/**").hasAnyRole("PROVIDER_INDIVIDUAL", "PROVIDER_INSTITUTION")
+                .requestMatchers("/api/client/**").hasRole("CLIENT")
+                .requestMatchers("/api/user/**").authenticated()
+                .requestMatchers("/api/consultations/**").authenticated()
+                .requestMatchers("/api/payments/**").authenticated()
+                .requestMatchers("/api/health-profile/**").authenticated()
+                
+                // All other requests require authentication
+                .anyRequest().authenticated()
+            )
+            
+            // 🔒 Security Headers
+            .headers(headers -> headers
+                .frameOptions(frame -> frame.deny()) // Prevent clickjacking
+                .contentTypeOptions(contentType -> contentType.disable())
+                .httpStrictTransportSecurity(hstsConfig ->
+                    hstsConfig.maxAgeInSeconds(31536000))
+                .referrerPolicy(referrer -> referrer.policy(
+                    org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER))
+            )
+            
+            // 🔒 Authentication Provider
+            .authenticationProvider(authenticationProvider());
 
         return http.build();
+    }
+
+    private CookieCsrfTokenRepository createCsrfTokenRepository() {
+        // FIXED: Enable CSRF protection with secure configuration
+        CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        repository.setCookiePath("/");
+        repository.setCookieMaxAge(-1); // Session-based (deleted when browser closes)
+        return repository;
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:5173", "http://localhost:3000"));
+        // 🔒 ENVIRONMENT-AWARE: Allow appropriate origins based on environment
+        List<String> allowedOrigins;
+        String environment = System.getProperty("spring.profiles.active", "development");
+        
+        if ("production".equals(environment)) {
+            // Production: Only production domains
+            allowedOrigins = Arrays.asList(
+                "https://gyna-id.com",
+                "https://app.gyna-id.com"
+            );
+        } else {
+            // Development/Staging: Include localhost for development
+            allowedOrigins = Arrays.asList(
+                "https://gyna-id.com",
+                "https://app.gyna-id.com",
+                "http://localhost:3000",  // React dev server
+                "http://localhost:5173",  // Vite dev server
+                "http://127.0.0.1:3000",
+                "http://127.0.0.1:5173"
+            );
+        }
+        
+        configuration.setAllowedOrigins(allowedOrigins);
+        
+        // 🔒 SECURE: Restrict allowed methods to essential ones
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        configuration.setAllowedHeaders(Arrays.asList("*"));
-        configuration.setExposedHeaders(Arrays.asList("Authorization", "Content-Type"));
+        
+        // 🔒 SECURE: Restrict allowed headers (was "*" - CRITICAL VULNERABILITY)
+        configuration.setAllowedHeaders(Arrays.asList(
+            "Authorization",
+            "Content-Type",
+            "X-CSRF-Token",
+            "X-Request-ID",
+            "Accept",
+            "Origin",
+            "Cache-Control"
+        ));
+        
+        // 🔒 SECURE: Expose only necessary headers
+        configuration.setExposedHeaders(Arrays.asList(
+            "Authorization",
+            "X-Request-ID",
+            "X-CSRF-Token"
+        ));
+        
+        // 🔒 SECURE: Allow credentials only from allowed origins
         configuration.setAllowCredentials(true);
-        configuration.setMaxAge(3600L);
+        
+        // 🔒 SECURE: Limit preflight cache time
+        configuration.setMaxAge(1800L); // 30 minutes
         
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

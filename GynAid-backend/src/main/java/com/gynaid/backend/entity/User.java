@@ -81,6 +81,14 @@ public class User implements UserDetails {
     @Builder.Default
     private ProfileCompletionStatus profileCompletionStatus = ProfileCompletionStatus.NOT_STARTED;
 
+    // Email verification fields
+    @Column(name = "email_verified")
+    @Builder.Default
+    private Boolean emailVerified = false;
+
+    @Column(name = "email_verified_at")
+    private LocalDateTime emailVerifiedAt;
+
     // New relationships - all optional (nullable)
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private ClientHealthProfile healthProfile;

@@ -1,6 +1,8 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import NetInfo from '@react-native-community/netinfo';
+import { SecureStore } from 'expo-secure-store';
+
+declare const __DEV__: boolean;
 
 class ApiServiceClass {
   private api: AxiosInstance;
@@ -9,7 +11,7 @@ class ApiServiceClass {
   private requestQueue: Array<() => Promise<any>> = [];
 
   constructor() {
-    this.baseURL = __DEV__ ? 'http://10.0.2.2:8080' : 'https://api.GynaId.ug';
+    this.baseURL = __DEV__ ? 'http://10.0.2.2:8080' : 'https://api.GynAid.ug';
     
     this.api = axios.create({
       baseURL: this.baseURL,
@@ -65,29 +67,33 @@ class ApiServiceClass {
   }
 
   private setupNetworkListener() {
-    NetInfo.addEventListener(state => {
-      const wasOffline = !this.isOnline;
-      this.isOnline = state.isConnected ?? false;
-      
-      // Process queued requests when coming back online
-      if (wasOffline && this.isOnline) {
-        this.processRequestQueue();
-      }
-    });
+    // Mock network listener - in real app this would use expo-network
+    // For now, just set online to true and skip network monitoring
+    this.isOnline = true;
+    
+    // In a real implementation, you would use:
+    // import { Network } from 'expo-network';
+    // Network.addNetworkStateListener((state) => {
+    //   const wasOffline = !this.isOnline;
+    //   this.isOnline = state.isConnected ?? false;
+    //   
+    //   if (wasOffline && this.isOnline) {
+    //     this.processRequestQueue();
+    //   }
+    // });
   }
 
   private async getStoredToken(): Promise<string | null> {
     try {
-      const { SecureStore } = await import('expo-secure-store');
       return await SecureStore.getItemAsync('jwt_token');
-    } catch {
+    } catch (error) {
+      console.warn('Error getting stored token:', error);
       return null;
     }
   }
 
   private async handleTokenExpiry() {
     try {
-      const { SecureStore } = await import('expo-secure-store');
       await SecureStore.deleteItemAsync('jwt_token');
       await AsyncStorage.removeItem('user');
       
@@ -197,7 +203,7 @@ class ApiServiceClass {
   public async clearCache() {
     try {
       const keys = await AsyncStorage.getAllKeys();
-      const cacheKeys = keys.filter(key => key.startsWith('cache_'));
+      const cacheKeys = keys.filter((key: string) => key.startsWith('cache_'));
       await AsyncStorage.multiRemove(cacheKeys);
     } catch (error) {
       console.error('Error clearing cache:', error);

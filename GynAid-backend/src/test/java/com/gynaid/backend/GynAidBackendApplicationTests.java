@@ -1,10 +1,10 @@
-package com.GynaId.backend;
+package com.gynaid.backend;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class GynaIdBackendApplicationTests {
+class GynAidBackendApplicationTests {
 
 	@Test
 	void contextLoads() {

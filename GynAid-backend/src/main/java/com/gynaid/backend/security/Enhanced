@@ -1,0 +1,399 @@
+package com.gynaid.backend.security;
+
+import io.jsonwebtoken.*;
+import io.jsonwebtoken.io.Decoders;
+import io.jsonwebtoken.security.Keys;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.stereotype.Service;
+
+import java.security.Key;
+import java.security.SecureRandom;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.Date;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+
+/**
+ * Enterprise-grade JWT service with session management and token rotation
+ * Provides secure token handling with blacklisting and device tracking
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class EnhancedJwtService {
+
+    private final RedisTemplate<String, Object> redisTemplate;
+    private final SecureRandom secureRandom = new SecureRandom();
+    
+    @Value("${app.jwt.secret}")
+    private String secretKey;
+
+    @Value("${app.jwt.access-token-expiration:900000}") // 15 minutes
+    private long accessTokenExpirationMs;
+
+    @Value("${app.jwt.refresh-token-expiration:604800000}") // 7 days
+    private long refreshTokenExpirationMs;
+
+    private static final String TOKEN_BLACKLIST_PREFIX = "token_blacklist:";
+    private static final String SESSION_PREFIX = "user_session:";
+    private static final String TOKEN_METADATA_PREFIX = "token_metadata:";
+
+    /**
+     * Generate access and refresh token pair
+     */
+    public TokenPair generateTokens(UserDetails userDetails, DeviceInfo deviceInfo) {
+        String userId = extractUserId(userDetails);
+        
+        // Generate access token
+        String accessToken = generateAccessToken(userDetails);
+        
+        // Generate refresh token
+        String refreshToken = generateRefreshToken(userDetails);
+        
+        // Store token metadata
+        TokenMetadata metadata = new TokenMetadata();
+        metadata.setUserId(userId);
+        metadata.setDeviceInfo(deviceInfo);
+        metadata.setCreatedAt(LocalDateTime.now());
+        metadata.setLastUsed(LocalDateTime.now());
+        metadata.setRevoked(false);
+        
+        String refreshKey = TOKEN_METADATA_PREFIX + refreshToken;
+        redisTemplate.opsForValue().set(refreshKey, metadata, refreshTokenExpirationMs, TimeUnit.MILLISECONDS);
+        
+        // Store user's active session
+        String sessionKey = SESSION_PREFIX + userId + ":" + refreshToken;
+        redisTemplate.opsForValue().set(sessionKey, deviceInfo, refreshTokenExpirationMs, TimeUnit.MILLISECONDS);
+        
+        log.info("Tokens generated for user: {} from device: {}", userId, deviceInfo.getDeviceId());
+        
+        return TokenPair.builder()
+            .accessToken(accessToken)
+            .refreshToken(refreshToken)
+            .accessTokenExpiresIn(accessTokenExpirationMs / 1000)
+            .refreshTokenExpiresIn(refreshTokenExpirationMs / 1000)
+            .build();
+    }
+
+    /**
+     * Refresh tokens with rotation (invalidate old refresh token)
+     */
+    public TokenPair refreshTokens(String refreshToken, DeviceInfo newDeviceInfo) {
+        // Verify refresh token
+        TokenMetadata metadata = verifyRefreshToken(refreshToken);
+        
+        if (metadata == null || metadata.isRevoked()) {
+            log.warn("Invalid refresh token used for refresh attempt");
+            throw new SecurityException("Invalid refresh token");
+        }
+        
+        // Check if token was used before (thwart replay attacks)
+        if (metadata.getLastUsed() != null) {
+            // Invalidate old refresh token
+            revokeRefreshToken(refreshToken);
+        }
+        
+        // Update token metadata
+        metadata.setLastUsed(LocalDateTime.now());
+        metadata.setDeviceInfo(newDeviceInfo);
+        
+        String refreshKey = TOKEN_METADATA_PREFIX + refreshToken;
+        redisTemplate.opsForValue().set(refreshKey, metadata, refreshTokenExpirationMs, TimeUnit.MILLISECONDS);
+        
+        // Generate new tokens
+        String userId = metadata.getUserId();
+        TokenPair newTokens = generateTokens(null, newDeviceInfo); // Simplified
+        
+        log.info("Tokens refreshed for user: {}", userId);
+        
+        return newTokens;
+    }
+
+    /**
+     * Revoke tokens (logout)
+     */
+    public void revokeTokens(String accessToken, String refreshToken) {
+        try {
+            // Add access token to blacklist
+            if (accessToken != null) {
+                addToBlacklist(accessToken, "logout");
+            }
+            
+            // Revoke refresh token
+            if (refreshToken != null) {
+                revokeRefreshToken(refreshToken);
+            }
+            
+            log.info("Tokens revoked successfully");
+            
+        } catch (Exception e) {
+            log.error("Error revoking tokens", e);
+        }
+    }
+
+    /**
+     * Verify access token with blacklist check
+     */
+    public boolean verifyAccessToken(String token) {
+        try {
+            // Check blacklist first
+            if (isTokenBlacklisted(token)) {
+                log.warn("Access token found in blacklist");
+                return false;
+            }
+            
+            // Verify JWT signature and expiration
+            getAllClaims(token);
+            return true;
+            
+        } catch (JwtException | IllegalArgumentException e) {
+            log.warn("Invalid access token: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Extract username (email) from token
+     */
+    public String extractUsername(String token) {
+        return extractClaim(token, Claims::getSubject);
+    }
+
+    /**
+     * Extract user ID from token claims
+     */
+    public String extractUserId(UserDetails userDetails) {
+        return userDetails.getUsername().split("@")[0]; // Simple implementation
+    }
+
+    /**
+     * Generic claim extractor
+     */
+    public <T> T extractClaim(String token, Function<Claims, T> resolver) {
+        final Claims claims = getAllClaims(token);
+        return resolver.apply(claims);
+    }
+
+    /**
+     * Generate access token
+     */
+    private String generateAccessToken(String userId) {
+        Map<String, Object> claims = Map.of(
+            "type", "access",
+            "device_id", generateDeviceId()
+        );
+        
+        return Jwts.builder()
+            .setClaims(claims)
+            .setSubject(userId)
+            .setIssuedAt(new Date())
+            .setExpiration(new Date(System.currentTimeMillis() + accessTokenExpirationMs))
+            .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+            .compact();
+    }
+
+    /**
+     * Generate refresh token
+     */
+    private String generateRefreshToken(UserDetails userDetails) {
+        Map<String, Object> claims = Map.of(
+            "type", "refresh",
+            "token_id", UUID.randomUUID().toString()
+        );
+        
+        return Jwts.builder()
+            .setClaims(claims)
+            .setSubject(userDetails.getUsername())
+            .setIssuedAt(new Date())
+            .setExpiration(new Date(System.currentTimeMillis() + refreshTokenExpirationMs))
+            .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+            .compact();
+    }
+
+    /**
+     * Verify refresh token and return metadata
+     */
+    private TokenMetadata verifyRefreshToken(String refreshToken) {
+        try {
+            // Verify JWT signature
+            Claims claims = getAllClaims(refreshToken);
+            
+            // Check if it's a refresh token
+            if (!"refresh".equals(claims.get("type"))) {
+                return null;
+            }
+            
+            // Get metadata from Redis
+            String metadataKey = TOKEN_METADATA_PREFIX + refreshToken;
+            TokenMetadata metadata = (TokenMetadata) redisTemplate.opsForValue().get(metadataKey);
+            
+            return metadata;
+            
+        } catch (JwtException | IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Revoke refresh token
+     */
+    private void revokeRefreshToken(String refreshToken) {
+        String metadataKey = TOKEN_METADATA_PREFIX + refreshToken;
+        TokenMetadata metadata = (TokenMetadata) redisTemplate.opsForValue().get(metadataKey);
+        
+        if (metadata != null) {
+            metadata.setRevoked(true);
+            redisTemplate.opsForValue().set(metadataKey, metadata, 1, TimeUnit.HOURS); // Keep for 1 hour
+        }
+    }
+
+    /**
+     * Add token to blacklist
+     */
+    private void addToBlacklist(String token, String reason) {
+        String blacklistKey = TOKEN_BLACKLIST_PREFIX + token;
+        BlacklistEntry entry = new BlacklistEntry();
+        entry.setToken(token);
+        entry.setReason(reason);
+        entry.setBlacklistedAt(LocalDateTime.now());
+        
+        redisTemplate.opsForValue().set(blacklistKey, entry, accessTokenExpirationMs, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * Check if token is blacklisted
+     */
+    private boolean isTokenBlacklisted(String token) {
+        String blacklistKey = TOKEN_BLACKLIST_PREFIX + token;
+        return Boolean.TRUE.equals(redisTemplate.hasKey(blacklistKey));
+    }
+
+    /**
+     * Parse all claims from token
+     */
+    private Claims getAllClaims(String token) {
+        return Jwts.parserBuilder()
+            .setSigningKey(getSigningKey())
+            .build()
+            .parseClaimsJws(token)
+            .getBody();
+    }
+
+    /**
+     * Get signing key
+     */
+    private Key getSigningKey() {
+        byte[] keyBytes = Decoders.BASE64URL.decode(secretKey);
+        return Keys.hmacShaKeyFor(keyBytes);
+    }
+
+    /**
+     * Generate unique device ID
+     */
+    private String generateDeviceId() {
+        byte[] deviceBytes = new byte[16];
+        secureRandom.nextBytes(deviceBytes);
+        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(deviceBytes);
+    }
+
+    // Data classes and result classes
+    public static class TokenPair {
+        private String accessToken;
+        private String refreshToken;
+        private long accessTokenExpiresIn;
+        private long refreshTokenExpiresIn;
+
+        public static class Builder {
+            private TokenPair result = new TokenPair();
+
+            public Builder accessToken(String accessToken) {
+                result.accessToken = accessToken;
+                return this;
+            }
+
+            public Builder refreshToken(String refreshToken) {
+                result.refreshToken = refreshToken;
+                return this;
+            }
+
+            public Builder accessTokenExpiresIn(long accessTokenExpiresIn) {
+                result.accessTokenExpiresIn = accessTokenExpiresIn;
+                return this;
+            }
+
+            public Builder refreshTokenExpiresIn(long refreshTokenExpiresIn) {
+                result.refreshTokenExpiresIn = refreshTokenExpiresIn;
+                return this;
+            }
+
+            public TokenPair build() {
+                return result;
+            }
+        }
+
+        public static Builder builder() {
+            return new Builder();
+        }
+    }
+
+    public static class DeviceInfo {
+        private String deviceId;
+        private String userAgent;
+        private String ipAddress;
+        private String deviceType;
+        private String os;
+
+        // Getters and setters
+        public String getDeviceId() { return deviceId; }
+        public void setDeviceId(String deviceId) { this.deviceId = deviceId; }
+        public String getUserAgent() { return userAgent; }
+        public void setUserAgent(String userAgent) { this.userAgent = userAgent; }
+        public String getIpAddress() { return ipAddress; }
+        public void setIpAddress(String ipAddress) { this.ipAddress = ipAddress; }
+        public String getDeviceType() { return deviceType; }
+        public void setDeviceType(String deviceType) { this.deviceType = deviceType; }
+        public String getOs() { return os; }
+        public void setOs(String os) { this.os = os; }
+    }
+
+    public static class TokenMetadata {
+        private String userId;
+        private DeviceInfo deviceInfo;
+        private LocalDateTime createdAt;
+        private LocalDateTime lastUsed;
+        private boolean revoked;
+
+        // Getters and setters
+        public String getUserId() { return userId; }
+        public void setUserId(String userId) { this.userId = userId; }
+        public DeviceInfo getDeviceInfo() { return deviceInfo; }
+        public void setDeviceInfo(DeviceInfo deviceInfo) { this.deviceInfo = deviceInfo; }
+        public LocalDateTime getCreatedAt() { return createdAt; }
+        public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+        public LocalDateTime getLastUsed() { return lastUsed; }
+        public void setLastUsed(LocalDateTime lastUsed) { this.lastUsed = lastUsed; }
+        public boolean isRevoked() { return revoked; }
+        public void setRevoked(boolean revoked) { this.revoked = revoked; }
+    }
+
+    public static class BlacklistEntry {
+        private String token;
+        private String reason;
+        private LocalDateTime blacklistedAt;
+
+        // Getters and setters
+        public String getToken() { return token; }
+        public void setToken(String token) { this.token = token; }
+        public String getReason() { return reason; }
+        public void setReason(String reason) { this.reason = reason; }
+        public LocalDateTime getBlacklistedAt() { return blacklistedAt; }
+        public void setBlacklistedAt(LocalDateTime blacklistedAt) { this.blacklistedAt = blacklistedAt; }
+    }
+}

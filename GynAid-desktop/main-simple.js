@@ -10,7 +10,7 @@ function createWindow() {
       contextIsolation: true
     },
     icon: path.join(__dirname, 'assets/icon.png'),
-    title: 'GynaId Desktop - AI Health Platform'
+    title: 'GynAid Desktop - AI Health Platform'
   });
 
   mainWindow.loadURL('http://localhost:5173');

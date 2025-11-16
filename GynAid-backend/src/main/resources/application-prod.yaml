@@ -3,7 +3,7 @@ spring:
     activate:
       on-profile: prod
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/GynaId_prod}
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/GynAid_prod}
     username: ${DATABASE_USERNAME:postgres}
     password: ${DATABASE_PASSWORD}
     driver-class-name: org.postgresql.Driver
@@ -39,12 +39,12 @@ logging:
   level:
     org.springframework.web: INFO
     org.hibernate: WARN
-    com.GynaId.backend: INFO
+    com.gynaid.backend: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
   file:
-    name: logs/GynaId.log
+    name: logs/GynAid.log
 
 management:
   endpoints:

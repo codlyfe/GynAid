@@ -1,29 +1,29 @@
 version: '3.8'
 
 services:
-  GynaId-db:
+  GynAid-db:
     image: postgres:15-alpine
-    container_name: GynaId-db-prod
+    container_name: GynAid-db-prod
     environment:
-      POSTGRES_DB: GynaId_prod
+      POSTGRES_DB: GynAid_prod
       POSTGRES_USER: ${DATABASE_USERNAME:-postgres}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
     volumes:
-      - GynaId_db_data:/var/lib/postgresql/data
+      - GynAid_db_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     restart: unless-stopped
     networks:
-      - GynaId-network
+      - GynAid-network
 
-  GynaId-backend:
+  GynAid-backend:
     build:
-      context: ./GynaId-backend
+      context: ./GynAid-backend
       dockerfile: Dockerfile
-    container_name: GynaId-backend-prod
+    container_name: GynAid-backend-prod
     environment:
       SPRING_PROFILES_ACTIVE: prod
-      DATABASE_URL: jdbc:postgresql://GynaId-db:5432/GynaId_prod
+      DATABASE_URL: jdbc:postgresql://GynAid-db:5432/GynAid_prod
       DATABASE_USERNAME: ${DATABASE_USERNAME:-postgres}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
@@ -32,33 +32,33 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - GynaId-db
+      - GynAid-db
     restart: unless-stopped
     networks:
-      - GynaId-network
+      - GynAid-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  GynaId-frontend:
+  GynAid-frontend:
     build:
-      context: ./GynaId-frontend
+      context: ./GynAid-frontend
       dockerfile: Dockerfile
-    container_name: GynaId-frontend-prod
+    container_name: GynAid-frontend-prod
     ports:
       - "80:80"
       - "443:443"
     depends_on:
-      - GynaId-backend
+      - GynAid-backend
     restart: unless-stopped
     networks:
-      - GynaId-network
+      - GynAid-network
 
 volumes:
-  GynaId_db_data:
+  GynAid_db_data:
 
 networks:
-  GynaId-network:
+  GynAid-network:
     driver: bridge

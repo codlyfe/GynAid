@@ -14,4 +14,5 @@ public class AuthResponse {
     private String token;
     private User user;
     private String message;
+    private java.util.List<String> errors;
 }

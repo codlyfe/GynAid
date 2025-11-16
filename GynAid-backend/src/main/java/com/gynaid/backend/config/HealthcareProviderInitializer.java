@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @Order(2)
@@ -26,11 +27,21 @@ public class HealthcareProviderInitializer implements CommandLineRunner {
     @Override
     public void run(String... args) throws Exception {
         if (providerRepository.count() == 0) {
-            initializeUgandanProviders();
-            initializeEastAfricanProviders();
-            initializeGlobalProviders();
-            System.out.println("Healthcare providers database initialized with " + providerRepository.count() + " providers");
+            System.out.println("Starting optimized healthcare provider initialization...");
+            long startTime = System.currentTimeMillis();
+            
+            initializeProviders();
+            
+            long endTime = System.currentTimeMillis();
+            System.out.println("Healthcare providers database initialized with " + providerRepository.count() + " providers in " + (endTime - startTime) + "ms");
         }
+    }
+
+    @Transactional
+    private void initializeProviders() {
+        initializeUgandanProviders();
+        initializeEastAfricanProviders();
+        initializeGlobalProviders();
     }
 
     private void initializeUgandanProviders() {

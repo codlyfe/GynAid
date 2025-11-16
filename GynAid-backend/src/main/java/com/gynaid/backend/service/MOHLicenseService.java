@@ -26,7 +26,7 @@ public class MOHLicenseService {
     @Value("${app.moh.api-key}")
     private String mohApiKey;
     
-    @Cacheable(value = "licenseValidations", unless = "#result != T(com.GynaId.entity.MOHLicense$VerificationStatus).VERIFIED")
+    @Cacheable(value = "licenseValidations", unless = "#result != T(com.gynaid.backend.entity.MOHLicense$VerificationStatus).VERIFIED")
     public MOHLicense.VerificationStatus validateLicense(String licenseNumber) {
         // Check cache first
         MOHLicense existingLicense = mohLicenseRepository.findByLicenseNumber(licenseNumber);

@@ -18,7 +18,6 @@ import {
   IconButton,
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LineChart } from 'react-native-chart-kit';
 import { useAuth } from '../services/AuthService';
 import { ApiService } from '../services/ApiService';
 import { theme, spacing } from '../utils/theme';
@@ -33,6 +32,13 @@ interface DashboardData {
   healthScore: number;
   recentSymptoms: string[];
   cycleData: number[];
+}
+
+interface UpcomingConsultation {
+  id: number;
+  providerName: string;
+  scheduledAt: string;
+  type: string;
 }
 
 const DashboardScreen = ({ navigation }: any) => {
@@ -220,35 +226,26 @@ const DashboardScreen = ({ navigation }: any) => {
                 </View>
               </View>
               
-              {/* Cycle Chart */}
+              {/* Cycle Chart Placeholder */}
               <View style={styles.chartContainer}>
                 <Text style={styles.chartTitle}>Cycle Length Trend</Text>
-                <LineChart
-                  data={{
-                    labels: ['6m ago', '5m', '4m', '3m', '2m', 'Last'],
-                    datasets: [
-                      {
-                        data: dashboardData.cycleData,
-                      },
-                    ],
-                  }}
-                  width={width - 80}
-                  height={200}
-                  chartConfig={chartConfig}
-                  bezier
-                  style={styles.chart}
-                />
+                <Text style={styles.chartPlaceholder}>
+                  Chart data available but chart library not installed
+                </Text>
+                <View style={styles.chartData}>
+                  <Text>Recent cycle data: {dashboardData?.cycleData?.join(', ') || 'No data'}</Text>
+                </View>
               </View>
             </Card.Content>
           </Card>
         )}
 
         {/* Upcoming Consultations */}
-        {dashboardData?.upcomingConsultations.length > 0 && (
+        {dashboardData && dashboardData.upcomingConsultations && dashboardData.upcomingConsultations.length > 0 && (
           <Card style={styles.card}>
             <Card.Content>
               <Title>Upcoming Consultations</Title>
-              {dashboardData.upcomingConsultations.map((consultation) => (
+              {dashboardData.upcomingConsultations.map((consultation: UpcomingConsultation) => (
                 <Surface key={consultation.id} style={styles.consultationItem}>
                   <View style={styles.consultationInfo}>
                     <Text style={styles.providerName}>
@@ -271,12 +268,12 @@ const DashboardScreen = ({ navigation }: any) => {
         )}
 
         {/* Recent Symptoms */}
-        {dashboardData?.recentSymptoms.length > 0 && (
+        {dashboardData && dashboardData.recentSymptoms && dashboardData.recentSymptoms.length > 0 && (
           <Card style={styles.card}>
             <Card.Content>
               <Title>Recent Symptoms</Title>
               <View style={styles.symptomsContainer}>
-                {dashboardData.recentSymptoms.map((symptom, index) => (
+                {dashboardData.recentSymptoms.map((symptom: string, index: number) => (
                   <Chip key={index} style={styles.symptomChip}>
                     {symptom}
                   </Chip>
@@ -397,6 +394,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: spacing.sm,
+  },
+  chartPlaceholder: {
+    fontSize: 14,
+    color: theme.colors.onSurface,
+    marginBottom: spacing.sm,
+  },
+  chartData: {
+    backgroundColor: theme.colors.surface,
+    padding: spacing.sm,
+    borderRadius: 8,
   },
   chart: {
     borderRadius: 8,

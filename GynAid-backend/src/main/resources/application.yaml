@@ -1,11 +1,125 @@
 spring:
   profiles:
     active: dev  # Default to development profile
+  # Default datasource configuration from application.properties
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: password
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 2
+      connection-timeout: 20000
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      leak-detection-threshold: 60000
+  # Default H2 console configuration from application.properties
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        web-allow-others: true
+  # Default JPA configuration from application.properties
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          batch_size: 25
+        order_inserts: true
+        order_updates: true
+        batch_versioned_data: true
+        generate_statistics: true
+        cache:
+          use_second_level_cache: false
+          use_query_cache: false
+  # Flyway configuration from application.properties
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  redis:
+    host: localhost
+    port: 6379
+    password:
+    timeout: 2000ms
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 0
+  mail:
+    host: localhost
+    port: 1025
+    username:
+    password:
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
 
 app:
+  # JWT Configuration
   jwt:
     secret: rrFe439oNlu3qVzy2usa7xpx9/9dYB83tnofz2JpOJU=
     expiration: 86400000  # 24 hours in milliseconds
+    refresh-expiration: 604800000  # 7 days in milliseconds
+    
+  # Email Verification Configuration
+  verification:
+    email:
+      expiry-minutes: 30
+      max-attempts: 3
+      resend-delay-minutes: 5
+    sms:
+      expiry-minutes: 10
+      max-attempts: 5
+      resend-delay-minutes: 10
+      
+  # Security Configuration
+  security:
+    rate-limiting:
+      enabled: true
+      requests-per-minute: 100
+      burst-capacity: 200
+      
+  # CORS Configuration from application.properties
+  cors:
+    allowed-origins: http://localhost:5173,http://localhost:3000
+    allowed-methods: GET,POST,PUT,DELETE,OPTIONS,PATCH
+    allowed-headers: "*"
+    allow-credentials: true
+      
+  # Transaction Management from application.properties
+  transaction:
+    connection:
+      pool_size: 20
+      autocommit: false
+    coordinator_class: jdbc
+    statement_cache_size: 50
+      
+  # Feature Flags Configuration
+  feature-flags:
+    poll-interval: 60
+    cache-timeout: 300
+    
+  # Payment Configuration
+  payment:
+    expiry-hours: 24
+    idempotency-timeout-hours: 24
+    
+  # MOH Integration Configuration
+  moh:
+    api-url: http://localhost:9999/mock-moh/validate
+    api-key: dev-placeholder-key
 
 ---
 # Development profile with H2 database
@@ -13,10 +127,6 @@ spring:
   config:
     activate:
       on-profile: dev
-app:
-  moh:
-    api-url: http://localhost:9999/mock-moh/validate  # dev-safe placeholder
-    api-key: dev-placeholder-key
   datasource:
     url: jdbc:h2:mem:testdb
     driver-class-name: org.h2.Driver
@@ -34,10 +144,50 @@ app:
     properties:
       hibernate:
         format_sql: true
-
   sql:
     init:
       mode: never  # Disable schema.sql for H2 to avoid PostGIS-specific statements
+
+app:
+  # Development-specific email settings
+  email:
+    from-name: "GynAid Dev"
+    from-address: "dev@gyna-id.com"
+    
+  # SMS Configuration for Development
+  sms:
+    twilio:
+      account-sid: ${TWILIO_ACCOUNT_SID:dev_account_sid}
+      auth-token: ${TWILIO_AUTH_TOKEN:dev_auth_token}
+      phone-number: ${TWILIO_PHONE_NUMBER:+1234567890}
+      
+  # MFA Configuration
+  mfa:
+    issuer: "GynAid Dev"
+    qr-code-url: "https://api.qrserver.com/v1/create-qr-code"
+    
+  # Stripe Configuration
+  stripe:
+    secret-key: ${STRIPE_SECRET_KEY:sk_test_dev_key}
+    webhook-secret: ${STRIPE_WEBHOOK_SECRET:whsec_dev_secret}
+    
+  # Mobile Money Configuration
+  mobile-money:
+    mtn:
+      client-id: ${MTN_CLIENT_ID:dev_mtn_client}
+      client-secret: ${MTN_CLIENT_SECRET:dev_mtn_secret}
+      base-url: https://sandbox.mtn.com
+    airtel:
+      client-id: ${AIRTEL_CLIENT_ID:dev_airtel_client}
+      client-secret: ${AIRTEL_CLIENT_SECRET:dev_airtel_secret}
+      base-url: https://sandbox.airtel.africa
+      
+  # Security Settings
+  security:
+    rate-limiting:
+      enabled: false  # Disabled for development
+    jwt:
+      blacklist-enabled: false  # Disabled for development
 
 ---
 # Test profile with H2 database
@@ -45,19 +195,11 @@ spring:
   config:
     activate:
       on-profile: test
-app:
-  moh:
-    api-url: http://localhost:9999/mock-moh/validate
-    api-key: test-placeholder-key
   datasource:
     url: jdbc:h2:mem:testdb
     driver-class-name: org.h2.Driver
     username: sa
     password: password
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
   jpa:
     database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
@@ -69,6 +211,33 @@ app:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  mail:
+    host: localhost
+    port: 3025
+    username: test
+    password: test
+
+app:
+  moh:
+    api-url: http://localhost:9999/mock-moh/validate
+    api-key: test-placeholder-key
+  email:
+    from-name: "GynAid Test"
+    from-address: "test@gyna-id.com"
+  sms:
+    twilio:
+      account-sid: test_account_sid
+      auth-token: test_auth_token
+      phone-number: +1234567890
+  mfa:
+    issuer: "GynAid Test"
+  stripe:
+    secret-key: sk_test_key
+    webhook-secret: whsec_test_secret
+  security:
+    rate-limiting:
+      requests-per-minute: 1000  # Higher limit for testing
+      burst-capacity: 2000
 
 ---
 # Production profile with PostgreSQL
@@ -84,20 +253,94 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false  # Disabled in production
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: true
+        format_sql: false
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          ssl:
+            trust: "*"
+
+app:
+  email:
+    from-name: "GynAid"
+    from-address: "noreply@gyna-id.com"
+  sms:
+    twilio:
+      account-sid: ${TWILIO_ACCOUNT_SID}
+      auth-token: ${TWILIO_AUTH_TOKEN}
+      phone-number: ${TWILIO_PHONE_NUMBER}
+  mfa:
+    issuer: "GynAid Production"
+    qr-code-url: "https://api.qrserver.com/v1/create-qr-code"
+  stripe:
+    secret-key: ${STRIPE_SECRET_KEY}
+    webhook-secret: ${STRIPE_WEBHOOK_SECRET}
+  mobile-money:
+    mtn:
+      client-id: ${MTN_CLIENT_ID}
+      client-secret: ${MTN_CLIENT_SECRET}
+      base-url: https://api.mtn.com
+    airtel:
+      client-id: ${AIRTEL_CLIENT_ID}
+      client-secret: ${AIRTEL_CLIENT_SECRET}
+      base-url: https://api.airtel.africa
+  security:
+    rate-limiting:
+      enabled: true
+      requests-per-minute: 60  # Conservative limits for production
+      burst-capacity: 100
+    jwt:
+      blacklist-enabled: true
 
 # Server configuration
 server:
-  port: 8080
-
-# Logging
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /api
+    
+# Actuator endpoints for monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+        
+# Logging configuration
 logging:
   level:
+    com.gynaid: DEBUG
+    org.springframework.security: DEBUG
     org.springframework.web: DEBUG
-    org.hibernate: INFO
-    com.GynaId.backend: DEBUG
+    org.hibernate: WARN
+    org.hibernate.engine.jdbc.batch.internal.BatchingBatch: DEBUG
+    org.hibernate.engine.jdbc.batch.internal.AbstractBatchImpl: DEBUG
+    org.hibernate.sql.update.OrderedUpdate: DEBUG
+    org.hibernate.sql.insert.OrderedInsert: DEBUG
+    com.gynaid.backend: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/gyna-id.log
+    max-size: 100MB
+    max-history: 30
 

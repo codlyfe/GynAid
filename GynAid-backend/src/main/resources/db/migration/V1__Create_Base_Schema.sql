@@ -1,5 +1,5 @@
 -- Migration V1: Create Base Schema
--- Creates the foundational tables for GynaId application
+-- Creates the foundational tables for GynAid application
 
 -- Create users table
 CREATE TABLE users (

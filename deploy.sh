@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# GynaId AI Platform Deployment Script
-echo "🚀 Deploying GynaId AI Platform..."
+# GynAid AI Platform Deployment Script
+echo "🚀 Deploying GynAid AI Platform..."
 
 # Set environment variables
 export DATABASE_PASSWORD=${DATABASE_PASSWORD:-"secure_password_123"}
@@ -36,7 +36,7 @@ echo "🏥 Checking service health..."
 curl -f http://localhost:8080/actuator/health || echo "❌ Backend health check failed"
 curl -f http://localhost || echo "❌ Frontend health check failed"
 
-echo "✅ GynaId AI Platform deployed successfully!"
+echo "✅ GynAid AI Platform deployed successfully!"
 echo "🌐 Frontend: http://localhost"
 echo "🔧 Backend API: http://localhost:8080"
 echo "📊 Health Check: http://localhost:8080/actuator/health"
