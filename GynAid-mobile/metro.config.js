@@ -10,15 +10,17 @@ config.resolver.platforms = ['ios', 'android', 'native', 'web'];
 config.resolver.unstable_enableSymlink = false;
 config.resolver.unstable_enablePackageExports = false;
 
-// Configure transformer for better performance
+// Configure transformer for better performance with enhanced minifier
 config.transformer.minifierConfig = {
   keep_fnames: true,
+  keep_classnames: true,
   mangle: {
-    keep_fnames: true
-  }
+    keep_fnames: true,
+    keep_classnames: true,
+  },
 };
 
-// Cache configuration
+// Enhanced cache configuration
 config.cacheStores = [
   require('metro-cache'),
   require('metro-cache-key'),
@@ -30,17 +32,18 @@ if (process.env.NODE_ENV === 'development') {
   config.resolver.platforms.push('web');
 }
 
-// Additional performance configurations
+// Performance optimization configurations
 config.maxWorkers = Math.floor(require('os').cpus().length / 2);
 
-// Bundle analysis for optimization
+// Bundle analysis and optimization settings
 config.bundler = {
-  // Enable bundle splitting
+  // Enable experimental bundle splitting for better performance
   unstable_experimentalSplitBundleChunks: true,
   // Optimize dependency resolution
   resolver: {
-    unstable_enableSymlink: false
-  }
+    unstable_enableSymlink: false,
+    resolverMainFields: ['react-native', 'browser', 'main'],
+  },
 };
 
 // Source map configuration for debugging

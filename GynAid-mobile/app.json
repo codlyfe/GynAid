@@ -80,7 +80,8 @@
             "enableProguardInReleaseBuilds": true,
             "enableSeparateBuildPerCPUArchitecture": true,
             "androidGradlePlugin": "8.1.2",
-            "androidGradleWrapper": "8.0"
+            "androidGradleWrapper": "8.0",
+            "enableHermes": true
           },
           "ios": {
             "deploymentTarget": "13.0",

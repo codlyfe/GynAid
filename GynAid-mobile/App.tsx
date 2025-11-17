@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -9,12 +9,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import * as SplashScreen from 'expo-splash-screen';
 
-// Screens
+// Critical screen - loaded immediately
 import DashboardScreen from './src/screens/DashboardScreen';
-import LoginScreen from './src/screens/LoginScreen';
-import RegisterScreen from './src/screens/RegisterScreen';
-import ChatScreen from './src/screens/ChatScreen';
-import CycleTrackerScreen from './src/screens/CycleTrackerScreen';
 
 // Services
 import { AuthProvider, useAuth } from './src/services/AuthService';
@@ -23,25 +19,51 @@ import { ErrorBoundary } from './src/components';
 import { NotificationService } from './src/services/NotificationService';
 import { theme } from './src/utils/theme';
 
+// Lazy load non-critical screens for performance optimization
+const LoginScreen = React.lazy(() => import('./src/screens/LoginScreen'));
+const RegisterScreen = React.lazy(() => import('./src/screens/RegisterScreen'));
+const ChatScreen = React.lazy(() => import('./src/screens/ChatScreen'));
+const CycleTrackerScreen = React.lazy(() => import('./src/screens/CycleTrackerScreen'));
+
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
 
-// Auth Navigator
+// Loading fallback component for Suspense
+const LazyScreenLoader = () => (
+  <View style={styles.lazyLoaderContainer}>
+    <ActivityIndicator size="large" color={theme.colors.primary} />
+    <Text style={styles.lazyLoaderText}>Loading...</Text>
+  </View>
+);
+
+// Auth Navigator with lazy loading
 function AuthNavigator() {
   return (
     <ErrorBoundary>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="Register" component={RegisterScreen} />
+        <Stack.Screen name="Login">
+          {props => (
+            <Suspense fallback={<LazyScreenLoader />}>
+              <LoginScreen {...props} />
+            </Suspense>
+          )}
+        </Stack.Screen>
+        <Stack.Screen name="Register">
+          {props => (
+            <Suspense fallback={<LazyScreenLoader />}>
+              <RegisterScreen {...props} />
+            </Suspense>
+          )}
+        </Stack.Screen>
       </Stack.Navigator>
     </ErrorBoundary>
   );
 }
 
-// Main App Tabs
+// Main App Tabs with lazy loading for non-critical tabs
 function MainTabNavigator() {
   return (
     <ErrorBoundary>
@@ -74,14 +96,33 @@ function MainTabNavigator() {
           headerShown: false,
         })}
       >
+        {/* Dashboard loaded immediately - critical for user experience */}
         <Tab.Screen name="Dashboard" component={DashboardScreen} />
-        <Tab.Screen name="Cycle" component={CycleTrackerScreen} />
-        <Tab.Screen name="Chat" component={ChatScreen} />
+        
+        {/* Non-critical screens lazy loaded */}
+        <Tab.Screen name="Cycle">
+          {props => (
+            <Suspense fallback={<LazyScreenLoader />}>
+              <CycleTrackerScreen {...props} />
+            </Suspense>
+          )}
+        </Tab.Screen>
+        
+        <Tab.Screen name="Chat">
+          {props => (
+            <Suspense fallback={<LazyScreenLoader />}>
+              <ChatScreen {...props} />
+            </Suspense>
+          )}
+        </Tab.Screen>
+        
         <Tab.Screen
           name="Profile"
-          component={() => <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <Text>Profile Screen (Coming Soon)</Text>
-          </View>}
+          component={() => (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <Text>Profile Screen (Coming Soon)</Text>
+            </View>
+          )}
         />
       </Tab.Navigator>
     </ErrorBoundary>
@@ -94,7 +135,13 @@ function MainNavigator() {
     <ErrorBoundary>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="MainTabs" component={MainTabNavigator} />
-        <Stack.Screen name="Chat" component={ChatScreen} />
+        <Stack.Screen name="Chat">
+          {props => (
+            <Suspense fallback={<LazyScreenLoader />}>
+              <ChatScreen {...props} />
+            </Suspense>
+          )}
+        </Stack.Screen>
       </Stack.Navigator>
     </ErrorBoundary>
   );
@@ -186,5 +233,16 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     color: theme.colors.onSurface,
+  },
+  lazyLoaderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: theme.colors.background,
+  },
+  lazyLoaderText: {
+    marginTop: 16,
+    fontSize: 14,
+    color: theme.colors.onSurfaceVariant,
   },
 });
