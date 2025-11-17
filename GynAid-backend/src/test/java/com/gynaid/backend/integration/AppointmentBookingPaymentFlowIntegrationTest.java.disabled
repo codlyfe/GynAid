@@ -1,0 +1,413 @@
+package com.gynaid.backend.integration;
+
+import com.gynaid.GynAidBackendApplication;
+import com.gynaid.backend.entity.Appointment;
+import com.gynaid.backend.entity.Payment;
+import com.gynaid.backend.entity.User;
+import com.gynaid.backend.repository.AppointmentRepository;
+import com.gynaid.backend.repository.PaymentRepository;
+import com.gynaid.backend.repository.UserRepository;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
+import org.springframework.test.context.ActiveProfiles;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Integration test suite for complete appointment booking and payment workflows
+ * Tests the full flow from user registration to payment completion
+ */
+@DataJpaTest
+@ActiveProfiles("test")
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.ANY)
+class AppointmentBookingPaymentFlowIntegrationTest {
+
+    @Autowired
+    private TestEntityManager entityManager;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private AppointmentRepository appointmentRepository;
+
+    @Autowired
+    private PaymentRepository paymentRepository;
+
+    private User testClient;
+    private User testProvider;
+
+    @BeforeEach
+    void setUp() {
+        // Create test users
+        testClient = User.builder()
+            .email("client@example.com")
+            .password("encodedPassword")
+            .firstName("Jane")
+            .lastName("Client")
+            .phoneNumber("+256700123456")
+            .role(User.UserRole.CLIENT)
+            .status(User.UserStatus.ACTIVE)
+            .profileCompletionStatus(User.ProfileCompletionStatus.BASIC_COMPLETE)
+            .createdAt(LocalDateTime.now())
+            .build();
+
+        testProvider = User.builder()
+            .email("provider@example.com")
+            .password("encodedPassword")
+            .firstName("Dr.")
+            .lastName("Smith")
+            .phoneNumber("+256700123457")
+            .role(User.UserRole.PROVIDER_INDIVIDUAL)
+            .status(User.UserStatus.ACTIVE)
+            .profileCompletionStatus(User.ProfileCompletionStatus.BASIC_COMPLETE)
+            .createdAt(LocalDateTime.now())
+            .build();
+
+        entityManager.persistAndFlush(testClient);
+        entityManager.persistAndFlush(testProvider);
+    }
+
+    @Test
+    void testCompleteAppointmentBookingFlow() {
+        // Test the complete flow: User registration → Provider search → Appointment booking → Payment
+
+        // Step 1: Verify users were created
+        List<User> allUsers = userRepository.findAll();
+        assertEquals(2, allUsers.size());
+        
+        User savedClient = userRepository.findByEmail("client@example.com").orElse(null);
+        User savedProvider = userRepository.findByEmail("provider@example.com").orElse(null);
+        
+        assertNotNull(savedClient);
+        assertNotNull(savedProvider);
+        assertEquals(User.UserRole.CLIENT, savedClient.getRole());
+        assertEquals(User.UserRole.PROVIDER_INDIVIDUAL, savedProvider.getRole());
+
+        // Step 2: Create appointment
+        LocalDateTime appointmentTime = LocalDateTime.now().plusDays(1);
+        Appointment appointment = Appointment.builder()
+            .client(savedClient)
+            .provider(savedProvider)
+            .startTime(appointmentTime)
+            .endTime(appointmentTime.plusMinutes(30))
+            .status(Appointment.AppointmentStatus.PENDING)
+            .paymentStatus(Appointment.PaymentStatus.UNPAID)
+            .notes("Integration test appointment")
+            .build();
+
+        Appointment savedAppointment = appointmentRepository.save(appointment);
+        assertNotNull(savedAppointment.getId());
+
+        // Step 3: Verify appointment data integrity
+        Appointment retrievedAppointment = appointmentRepository.findById(savedAppointment.getId()).orElse(null);
+        assertNotNull(retrievedAppointment);
+        assertEquals(Appointment.AppointmentStatus.PENDING, retrievedAppointment.getStatus());
+        assertEquals(Appointment.PaymentStatus.UNPAID, retrievedAppointment.getPaymentStatus());
+        assertEquals("client@example.com", retrievedAppointment.getClient().getEmail());
+        assertEquals("provider@example.com", retrievedAppointment.getProvider().getEmail());
+
+        // Step 4: Update appointment status (simulating provider approval)
+        retrievedAppointment.setStatus(Appointment.AppointmentStatus.APPROVED);
+        Appointment updatedAppointment = appointmentRepository.save(retrievedAppointment);
+        assertEquals(Appointment.AppointmentStatus.APPROVED, updatedAppointment.getStatus());
+
+        // Step 5: Create payment record (simulating payment processing)
+        Payment payment = Payment.builder()
+            .appointment(updatedAppointment)
+            .amount(java.math.BigDecimal.valueOf(275000))
+            .currency("UGX")
+            .paymentMethod("mobile_money")
+            .status(Payment.PaymentStatus.INITIATED)
+            .build();
+
+        Payment savedPayment = paymentRepository.save(payment);
+        assertNotNull(savedPayment.getId());
+
+        // Step 6: Update payment and appointment status (simulating successful payment)
+        savedPayment.setStatus(Payment.PaymentStatus.SUCCEEDED);
+        paymentRepository.save(savedPayment);
+
+        updatedAppointment.setPaymentStatus(Appointment.PaymentStatus.PAID);
+        appointmentRepository.save(updatedAppointment);
+
+        // Step 7: Final verification
+        Payment retrievedPayment = paymentRepository.findById(savedPayment.getId()).orElse(null);
+        Appointment finalAppointment = appointmentRepository.findById(updatedAppointment.getId()).orElse(null);
+
+        assertNotNull(retrievedPayment);
+        assertEquals(Payment.PaymentStatus.SUCCEEDED, retrievedPayment.getStatus());
+        
+        assertNotNull(finalAppointment);
+        assertEquals(Appointment.PaymentStatus.PAID, finalAppointment.getPaymentStatus());
+        assertEquals(Appointment.AppointmentStatus.APPROVED, finalAppointment.getStatus());
+
+        // Step 8: Verify relationship integrity
+        assertEquals(savedPayment.getAppointment().getId(), finalAppointment.getId());
+        assertEquals(finalAppointment.getClient().getEmail(), "client@example.com");
+        assertEquals(finalAppointment.getProvider().getEmail(), "provider@example.com");
+    }
+
+    @Test
+    void testAppointmentCancellationAndPaymentRefund() {
+        // Test cancellation flow with payment refund
+
+        // Setup: Create appointment and payment
+        LocalDateTime appointmentTime = LocalDateTime.now().plusDays(2);
+        Appointment appointment = Appointment.builder()
+            .client(testClient)
+            .provider(testProvider)
+            .startTime(appointmentTime)
+            .endTime(appointmentTime.plusMinutes(30))
+            .status(Appointment.AppointmentStatus.APPROVED)
+            .paymentStatus(Appointment.PaymentStatus.PAID)
+            .build();
+
+        Appointment savedAppointment = appointmentRepository.save(appointment);
+
+        Payment payment = Payment.builder()
+            .appointment(savedAppointment)
+            .amount(java.math.BigDecimal.valueOf(275000))
+            .currency("UGX")
+            .paymentMethod("mobile_money")
+            .status(Payment.PaymentStatus.SUCCEEDED)
+            .build();
+
+        Payment savedPayment = paymentRepository.save(payment);
+
+        // Step 1: Client cancels appointment
+        savedAppointment.setStatus(Appointment.AppointmentStatus.CANCELLED);
+        savedAppointment.setPaymentStatus(Appointment.PaymentStatus.REFUND_PENDING);
+        appointmentRepository.save(savedAppointment);
+
+        // Step 2: Process refund
+        savedPayment.setStatus(Payment.PaymentStatus.REFUNDED);
+        paymentRepository.save(savedPayment);
+
+        // Step 3: Update appointment with final status
+        savedAppointment.setPaymentStatus(Appointment.PaymentStatus.REFUNDED);
+        appointmentRepository.save(savedAppointment);
+
+        // Verification
+        Appointment cancelledAppointment = appointmentRepository.findById(savedAppointment.getId()).orElse(null);
+        Payment refundedPayment = paymentRepository.findById(savedPayment.getId()).orElse(null);
+
+        assertNotNull(cancelledAppointment);
+        assertEquals(Appointment.AppointmentStatus.CANCELLED, cancelledAppointment.getStatus());
+        assertEquals(Appointment.PaymentStatus.REFUNDED, cancelledAppointment.getPaymentStatus());
+
+        assertNotNull(refundedPayment);
+        assertEquals(Payment.PaymentStatus.REFUNDED, refundedPayment.getStatus());
+    }
+
+    @Test
+    void testMultipleAppointmentsForSameClient() {
+        // Test that one client can have multiple appointments
+
+        // Create multiple appointments for the same client
+        LocalDateTime time1 = LocalDateTime.now().plusDays(1);
+        LocalDateTime time2 = LocalDateTime.now().plusDays(2);
+        LocalDateTime time3 = LocalDateTime.now().plusDays(3);
+
+        Appointment appointment1 = Appointment.builder()
+            .client(testClient)
+            .provider(testProvider)
+            .startTime(time1)
+            .endTime(time1.plusMinutes(30))
+            .status(Appointment.AppointmentStatus.PENDING)
+            .paymentStatus(Appointment.PaymentStatus.UNPAID)
+            .build();
+
+        Appointment appointment2 = Appointment.builder()
+            .client(testClient)
+            .provider(testProvider)
+            .startTime(time2)
+            .endTime(time2.plusMinutes(30))
+            .status(Appointment.AppointmentStatus.APPROVED)
+            .paymentStatus(Appointment.PaymentStatus.PAID)
+            .build();
+
+        Appointment appointment3 = Appointment.builder()
+            .client(testClient)
+            .provider(testProvider)
+            .startTime(time3)
+            .endTime(time3.plusMinutes(30))
+            .status(Appointment.AppointmentStatus.COMPLETED)
+            .paymentStatus(Appointment.PaymentStatus.PAID)
+            .build();
+
+        appointmentRepository.save(appointment1);
+        appointmentRepository.save(appointment2);
+        appointmentRepository.save(appointment3);
+
+        // Verify all appointments are linked to the same client
+        List<Appointment> clientAppointments = appointmentRepository.findByClient(testClient);
+        
+        assertEquals(3, clientAppointments.size());
+        
+        // Verify status distribution
+        long pendingCount = clientAppointments.stream()
+            .filter(apt -> apt.getStatus() == Appointment.AppointmentStatus.PENDING)
+            .count();
+        long approvedCount = clientAppointments.stream()
+            .filter(apt -> apt.getStatus() == Appointment.AppointmentStatus.APPROVED)
+            .count();
+        long completedCount = clientAppointments.stream()
+            .filter(apt -> apt.getStatus() == Appointment.AppointmentStatus.COMPLETED)
+            .count();
+
+        assertEquals(1, pendingCount);
+        assertEquals(1, approvedCount);
+        assertEquals(1, completedCount);
+    }
+
+    @Test
+    void testProviderAppointmentManagement() {
+        // Test provider can see their appointments
+
+        // Create appointments for the provider
+        LocalDateTime time1 = LocalDateTime.now().plusDays(1);
+        LocalDateTime time2 = LocalDateTime.now().plusDays(2);
+
+        Appointment appointment1 = Appointment.builder()
+            .client(testClient)
+            .provider(testProvider)
+            .startTime(time1)
+            .endTime(time1.plusMinutes(30))
+            .status(Appointment.AppointmentStatus.PENDING)
+            .paymentStatus(Appointment.PaymentStatus.UNPAID)
+            .build();
+
+        Appointment appointment2 = Appointment.builder()
+            .client(testClient)
+            .provider(testProvider)
+            .startTime(time2)
+            .endTime(time2.plusMinutes(30))
+            .status(Appointment.AppointmentStatus.PENDING)
+            .paymentStatus(Appointment.PaymentStatus.UNPAID)
+            .build();
+
+        appointmentRepository.save(appointment1);
+        appointmentRepository.save(appointment2);
+
+        // Verify provider can see their appointments
+        List<Appointment> providerAppointments = appointmentRepository.findByProvider(testProvider);
+        
+        assertEquals(2, providerAppointments.size());
+        
+        // Verify all are pending
+        long pendingCount = providerAppointments.stream()
+            .filter(apt -> apt.getStatus() == Appointment.AppointmentStatus.PENDING)
+            .count();
+        assertEquals(2, pendingCount);
+    }
+
+    @Test
+    void testAppointmentStatusTransition() {
+        // Test proper status transitions
+
+        LocalDateTime appointmentTime = LocalDateTime.now().plusDays(1);
+        Appointment appointment = Appointment.builder()
+            .client(testClient)
+            .provider(testProvider)
+            .startTime(appointmentTime)
+            .endTime(appointmentTime.plusMinutes(30))
+            .status(Appointment.AppointmentStatus.PENDING)
+            .paymentStatus(Appointment.PaymentStatus.UNPAID)
+            .build();
+
+        Appointment savedAppointment = appointmentRepository.save(appointment);
+
+        // Transition: PENDING → APPROVED
+        savedAppointment.setStatus(Appointment.AppointmentStatus.APPROVED);
+        appointmentRepository.save(savedAppointment);
+        assertEquals(Appointment.AppointmentStatus.APPROVED, savedAppointment.getStatus());
+
+        // Transition: APPROVED → IN_PROGRESS (if needed)
+        savedAppointment.setStatus(Appointment.AppointmentStatus.IN_PROGRESS);
+        appointmentRepository.save(savedAppointment);
+        assertEquals(Appointment.AppointmentStatus.IN_PROGRESS, savedAppointment.getStatus());
+
+        // Transition: IN_PROGRESS → COMPLETED
+        savedAppointment.setStatus(Appointment.AppointmentStatus.COMPLETED);
+        appointmentRepository.save(savedAppointment);
+        assertEquals(Appointment.AppointmentStatus.COMPLETED, savedAppointment.getStatus());
+
+        // Final verification
+        Appointment finalAppointment = appointmentRepository.findById(savedAppointment.getId()).orElse(null);
+        assertNotNull(finalAppointment);
+        assertEquals(Appointment.AppointmentStatus.COMPLETED, finalAppointment.getStatus());
+    }
+
+    @Test
+    void testAppointmentWithProviderNotes() {
+        // Test provider can add notes to appointments
+
+        LocalDateTime appointmentTime = LocalDateTime.now().plusDays(1);
+        Appointment appointment = Appointment.builder()
+            .client(testClient)
+            .provider(testProvider)
+            .startTime(appointmentTime)
+            .endTime(appointmentTime.plusMinutes(30))
+            .status(Appointment.AppointmentStatus.PENDING)
+            .paymentStatus(Appointment.PaymentStatus.UNPAID)
+            .providerNotes("Initial consultation scheduled")
+            .build();
+
+        Appointment savedAppointment = appointmentRepository.save(appointment);
+
+        // Update notes
+        savedAppointment.setProviderNotes("Patient has history of hypertension. Monitor blood pressure.");
+        Appointment updatedAppointment = appointmentRepository.save(savedAppointment);
+
+        // Verification
+        Appointment retrievedAppointment = appointmentRepository.findById(savedAppointment.getId()).orElse(null);
+        assertNotNull(retrievedAppointment);
+        assertEquals("Patient has history of hypertension. Monitor blood pressure.", 
+                    retrievedAppointment.getProviderNotes());
+    }
+
+    @Test
+    void testAppointmentDataIntegrity() {
+        // Test data integrity and constraints
+
+        LocalDateTime appointmentTime = LocalDateTime.now().plusDays(1);
+        Appointment appointment = Appointment.builder()
+            .client(testClient)
+            .provider(testProvider)
+            .startTime(appointmentTime)
+            .endTime(appointmentTime.plusMinutes(30))
+            .status(Appointment.AppointmentStatus.PENDING)
+            .paymentStatus(Appointment.PaymentStatus.UNPAID)
+            .notes("Test appointment notes")
+            .build();
+
+        Appointment savedAppointment = appointmentRepository.save(appointment);
+
+        // Fetch and verify all data
+        Appointment retrievedAppointment = appointmentRepository.findById(savedAppointment.getId()).orElse(null);
+        assertNotNull(retrievedAppointment);
+        
+        assertNotNull(retrievedAppointment.getId());
+        assertNotNull(retrievedAppointment.getClient());
+        assertNotNull(retrievedAppointment.getProvider());
+        assertNotNull(retrievedAppointment.getStartTime());
+        assertNotNull(retrievedAppointment.getEndTime());
+        assertNotNull(retrievedAppointment.getStatus());
+        assertNotNull(retrievedAppointment.getPaymentStatus());
+        assertNotNull(retrievedAppointment.getCreatedAt());
+
+        // Verify relationships
+        assertEquals(testClient.getId(), retrievedAppointment.getClient().getId());
+        assertEquals(testProvider.getId(), retrievedAppointment.getProvider().getId());
+        assertEquals("client@example.com", retrievedAppointment.getClient().getEmail());
+        assertEquals("provider@example.com", retrievedAppointment.getProvider().getEmail());
+    }
+}

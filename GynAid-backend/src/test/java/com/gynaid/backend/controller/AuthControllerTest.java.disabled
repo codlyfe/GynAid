@@ -1,0 +1,298 @@
+package com.gynaid.backend.controller;
+
+import com.gynaid.backend.dto.AuthRequest;
+import com.gynaid.backend.dto.AuthResponse;
+import com.gynaid.backend.dto.RegisterRequest;
+import com.gynaid.backend.entity.User;
+import com.gynaid.backend.security.JwtService;
+import com.gynaid.backend.service.InputValidationService;
+import com.gynaid.backend.service.RateLimitingService;
+import com.gynaid.backend.service.UserService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
+/**
+ * Comprehensive test suite for AuthController
+ * Tests authentication, registration, and security features
+ */
+@ExtendWith(MockitoExtension.class)
+class AuthControllerTest {
+
+    @Mock
+    private AuthenticationManager authenticationManager;
+
+    @Mock
+    private UserService userService;
+
+    @Mock
+    private JwtService jwtService;
+
+    @Mock
+    private PasswordEncoder passwordEncoder;
+
+    @Mock
+    private InputValidationService inputValidationService;
+
+    @Mock
+    private RateLimitingService rateLimitingService;
+
+    @InjectMocks
+    private AuthController authController;
+
+    private User testUser;
+    private RegisterRequest validRegisterRequest;
+    private AuthRequest validAuthRequest;
+
+    @BeforeEach
+    void setUp() {
+        // Setup test user
+        testUser = User.builder()
+            .id(1L)
+            .email("test@example.com")
+            .password("encodedPassword")
+            .firstName("John")
+            .lastName("Doe")
+            .phoneNumber("+256700123456")
+            .role(User.UserRole.CLIENT)
+            .status(User.UserStatus.ACTIVE)
+            .profileCompletionStatus(User.ProfileCompletionStatus.BASIC_COMPLETE)
+            .createdAt(LocalDateTime.now())
+            .build();
+
+        // Setup valid register request
+        validRegisterRequest = RegisterRequest.builder()
+            .email("test@example.com")
+            .password("SecurePassword123!")
+            .firstName("John")
+            .lastName("Doe")
+            .phoneNumber("+256700123456")
+            .role(User.UserRole.CLIENT)
+            .build();
+
+        // Setup valid auth request
+        validAuthRequest = AuthRequest.builder()
+            .email("test@example.com")
+            .password("SecurePassword123!")
+            .build();
+    }
+
+    @Test
+    void testSuccessfulUserRegistration() {
+        // Arrange
+        InputValidationService.ValidationResult mockValidationResult = mock(InputValidationService.ValidationResult.class);
+        when(mockValidationResult.isValid()).thenReturn(true);
+        when(mockValidationResult.getSanitizedData()).thenReturn(validRegisterRequest);
+        when(inputValidationService.validateRegistrationInput(any(InputValidationService.RegistrationInput.class)))
+            .thenReturn(mockValidationResult);
+        when(userService.userExists("test@example.com")).thenReturn(false);
+        when(passwordEncoder.encode("SecurePassword123!")).thenReturn("encodedPassword");
+        when(userService.saveUser(any(User.class))).thenReturn(testUser);
+        when(jwtService.generateToken(testUser)).thenReturn("mock-jwt-token");
+
+        // Act
+        var response = authController.register(validRegisterRequest);
+
+        // Assert
+        assertEquals(200, response.getStatusCode().value());
+        assertTrue(response.getBody().getToken() != null);
+        assertEquals("test@example.com", response.getBody().getUser().getEmail());
+        assertEquals("User registered successfully", response.getBody().getMessage());
+    }
+
+    @Test
+    void testRegistrationWithDuplicateEmail() {
+        // Arrange
+        InputValidationService.ValidationResult mockValidationResult = mock(InputValidationService.ValidationResult.class);
+        when(mockValidationResult.isValid()).thenReturn(true);
+        when(mockValidationResult.getSanitizedData()).thenReturn(validRegisterRequest);
+        when(inputValidationService.validateRegistrationInput(any(InputValidationService.RegistrationInput.class)))
+            .thenReturn(mockValidationResult);
+        when(userService.userExists("test@example.com")).thenReturn(true);
+
+        // Act
+        var response = authController.register(validRegisterRequest);
+
+        // Assert
+        assertEquals(400, response.getStatusCode().value());
+        assertEquals("User already exists with this email", response.getBody().getMessage());
+    }
+
+    @Test
+    void testRegistrationWithInvalidInput() {
+        // Arrange
+        InputValidationService.ValidationResult mockValidationResult = mock(InputValidationService.ValidationResult.class);
+        when(mockValidationResult.isValid()).thenReturn(false);
+        when(mockValidationResult.getErrors()).thenReturn(List.of("Invalid email format", "Password too short"));
+
+        when(inputValidationService.validateRegistrationInput(any(InputValidationService.RegistrationInput.class)))
+            .thenReturn(mockValidationResult);
+
+        // Act
+        var response = authController.register(validRegisterRequest);
+
+        // Assert
+        assertEquals(400, response.getStatusCode().value());
+        assertEquals("Invalid input data", response.getBody().getMessage());
+        assertTrue(response.getBody().getErrors().size() > 0);
+    }
+
+    @Test
+    void testRegistrationRateLimitExceeded() {
+        // Arrange
+        InputValidationService.ValidationResult mockValidationResult = mock(InputValidationService.ValidationResult.class);
+        when(mockValidationResult.isValid()).thenReturn(true);
+        when(inputValidationService.validateRegistrationInput(any(InputValidationService.RegistrationInput.class)))
+            .thenReturn(mockValidationResult);
+
+        RateLimitingService.RateLimitResult rateLimitResult = RateLimitingService.RateLimitResult.builder()
+            .allowed(false)
+            .currentCount(5)
+            .remainingTimeSeconds(60)
+            .resetTime(LocalDateTime.now().plusMinutes(1))
+            .build();
+
+        when(rateLimitingService.checkRegisterRateLimit(anyString(), anyString()))
+            .thenReturn(rateLimitResult);
+
+        // Act
+        var response = authController.register(validRegisterRequest);
+
+        // Assert
+        assertEquals(429, response.getStatusCode().value());
+        assertTrue(response.getBody().getMessage().contains("Too many registration attempts"));
+        assertTrue(response.getBody().getErrors().get(0).contains("Rate limit exceeded"));
+    }
+
+    @Test
+    void testSuccessfulAuthentication() {
+        // Arrange
+        InputValidationService.ValidationResult mockValidationResult = mock(InputValidationService.ValidationResult.class);
+        when(mockValidationResult.isValid()).thenReturn(true);
+        when(mockValidationResult.getSanitizedData()).thenReturn(validAuthRequest);
+        when(inputValidationService.validateLoginInput(any(InputValidationService.LoginInput.class)))
+            .thenReturn(mockValidationResult);
+
+        Authentication mockAuth = mock(Authentication.class);
+        when(mockAuth.getPrincipal()).thenReturn(testUser);
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+            .thenReturn(mockAuth);
+        when(jwtService.generateToken(testUser)).thenReturn("mock-jwt-token");
+
+        // Act
+        var response = authController.authenticate(validAuthRequest);
+
+        // Assert
+        assertEquals(200, response.getStatusCode().value());
+        assertEquals("mock-jwt-token", response.getBody().getToken());
+        assertEquals("test@example.com", response.getBody().getUser().getEmail());
+        assertEquals("Login successful", response.getBody().getMessage());
+    }
+
+    @Test
+    void testAuthenticationWithInvalidCredentials() {
+        // Arrange
+        InputValidationService.ValidationResult mockValidationResult = mock(InputValidationService.ValidationResult.class);
+        when(mockValidationResult.isValid()).thenReturn(true);
+        when(inputValidationService.validateLoginInput(any(InputValidationService.LoginInput.class)))
+            .thenReturn(mockValidationResult);
+
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+            .thenThrow(new org.springframework.security.authentication.BadCredentialsException("Invalid credentials"));
+
+        // Act
+        var response = authController.authenticate(validAuthRequest);
+
+        // Assert
+        assertEquals(400, response.getStatusCode().value());
+        assertEquals("Invalid email or password", response.getBody().getMessage());
+    }
+
+    @Test
+    void testAuthenticationWithLockedAccount() {
+        // Arrange
+        InputValidationService.ValidationResult mockValidationResult = mock(InputValidationService.ValidationResult.class);
+        when(mockValidationResult.isValid()).thenReturn(true);
+        when(inputValidationService.validateLoginInput(any(InputValidationService.LoginInput.class)))
+            .thenReturn(mockValidationResult);
+
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+            .thenThrow(new org.springframework.security.authentication.LockedException("Account is locked"));
+
+        // Act
+        var response = authController.authenticate(validAuthRequest);
+
+        // Assert
+        assertEquals(400, response.getStatusCode().value());
+        assertEquals("Account is locked. Please contact support.", response.getBody().getMessage());
+    }
+
+    @Test
+    void testAuthenticationWithInvalidInput() {
+        // Arrange
+        InputValidationService.ValidationResult mockValidationResult = mock(InputValidationService.ValidationResult.class);
+        when(mockValidationResult.isValid()).thenReturn(false);
+        when(mockValidationResult.getErrors()).thenReturn(List.of("Email format invalid"));
+
+        when(inputValidationService.validateLoginInput(any(InputValidationService.LoginInput.class)))
+            .thenReturn(mockValidationResult);
+
+        // Act
+        var response = authController.authenticate(validAuthRequest);
+
+        // Assert
+        assertEquals(400, response.getStatusCode().value());
+        assertEquals("Invalid input data", response.getBody().getMessage());
+    }
+
+    @Test
+    void testGetCurrentUser() {
+        // Arrange
+        Authentication mockAuth = mock(Authentication.class);
+        when(mockAuth.getPrincipal()).thenReturn(testUser);
+
+        // Act
+        var response = authController.getCurrentUser(mockAuth);
+
+        // Assert
+        assertEquals(200, response.getStatusCode().value());
+        assertEquals(testUser, response.getBody());
+    }
+
+    @Test
+    void testHealthCheckEndpoint() {
+        // Act
+        var response = authController.test();
+
+        // Assert
+        assertEquals(200, response.getStatusCode().value());
+        assertEquals("Backend is working!", response.getBody());
+    }
+
+    @Test
+    void testEmailMasking() {
+        // Arrange - Use reflection to access the private method
+        var method = AuthController.class.getDeclaredMethod("maskEmail", String.class);
+        method.setAccessible(true);
+
+        // Test various email formats
+        assertEquals("***", method.invoke(authController, (String) null));
+        assertEquals("***@***", method.invoke(authController, "a@"));
+        assertEquals("j***e@example.com", method.invoke(authController, "john@example.com"));
+        assertEquals("t***t@test.co", method.invoke(authController, "test@test.co"));
+    }
+}

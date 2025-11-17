@@ -88,7 +88,7 @@ public class AIHealthAssistantService {
         try {
             // For AI purposes, we need the entity, so we'll fetch it directly
             return healthProfileRepository.findByUserId(userId)
-                .map(hp -> hp.getGynecologicalProfile())
+                .map(hp -> (GynecologicalProfile) hp.getGynecologicalProfile())
                 .orElse(null);
         } catch (Exception e) {
             log.warn("Could not get gynecological profile for user {}: {}", userId, e.getMessage());

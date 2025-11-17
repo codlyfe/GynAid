@@ -35,6 +35,9 @@ public class MedicalVitals {
     @Column(name = "blood_pressure_diastolic")
     private Integer bloodPressureDiastolic;
     
+    @Column(name = "heart_rate")
+    private Integer heartRate;
+    
     @Column(name = "blood_type")
     private String bloodType;
     
@@ -49,6 +52,27 @@ public class MedicalVitals {
     @PreUpdate
     public void preUpdate() {
         this.updatedAt = LocalDateTime.now();
+    }
+    
+    // Add missing getter methods for compatibility
+    public Double getHeight() {
+        return heightCm;
+    }
+    
+    public Double getWeight() {
+        return weightKg;
+    }
+    
+    public Integer getSystolicBP() {
+        return bloodPressureSystolic;
+    }
+    
+    public Integer getDiastolicBP() {
+        return bloodPressureDiastolic;
+    }
+    
+    public Integer getHeartRate() {
+        return heartRate;
     }
     
     // Computed BMI calculation

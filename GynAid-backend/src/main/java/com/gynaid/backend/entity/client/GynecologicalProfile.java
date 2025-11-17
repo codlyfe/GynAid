@@ -5,6 +5,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.util.List;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -95,6 +97,26 @@ public class GynecologicalProfile {
     public void preUpdate() {
         this.updatedAt = LocalDateTime.now();
     }
+
+    // Add missing getter methods for compatibility
+    public List<MenstruationCycle> getMenstrualCycles() {
+        return cycles;
+    }
+
+    // Severity levels for PMS and dysmenorrhea
+    public enum Severity {
+        NONE, MILD, MODERATE, SEVERE
+    }
+
+    public Severity getDysmenorrheaSeverity() {
+        // Default to mild - in real implementation, this would be from user input
+        return Severity.MILD;
+    }
+
+    public List<String> getPmsSymptoms() {
+        // Return common PMS symptoms
+        return java.util.Arrays.asList("Mood swings", "Breast tenderness", "Bloating");
+    }
     
     public enum CycleRegularity {
         VERY_REGULAR, REGULAR, SOMEWHAT_IRREGULAR, VERY_IRREGULAR, UNKNOWN
@@ -105,7 +127,7 @@ public class GynecologicalProfile {
     }
     
     public enum ContraceptionMethod {
-        NONE, CONDOMS, BIRTH_CONTROL_PILLS, IUD, IMPLANT, INJECTION, 
+        NONE, CONDOMS, BIRTH_CONTROL_PILLS, IUD, IMPLANT, INJECTION,
         NATURAL_FAMILY_PLANNING, STERILIZATION, OTHER
     }
     

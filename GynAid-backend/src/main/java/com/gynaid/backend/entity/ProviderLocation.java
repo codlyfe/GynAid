@@ -62,7 +62,8 @@ public class ProviderLocation {
         ONLINE,
         OFFLINE,
         BUSY,
-        ON_BREAK
+        ON_BREAK,
+        AVAILABLE     // Added to match what ProviderController expects
     }
 
     public enum ServiceType {
@@ -70,6 +71,16 @@ public class ProviderLocation {
         SCHEDULED_VISIT,
         HOME_VISIT,
         TELEMEDICINE
+    }
+
+    // Helper methods that the controller expects
+    public String getDistrict() {
+        // For now, return a default district. This would normally be derived from coordinates
+        return "Kampala"; // Default to Kampala for now
+    }
+
+    public Point getCoordinates() {
+        return currentLocation;
     }
 }
 

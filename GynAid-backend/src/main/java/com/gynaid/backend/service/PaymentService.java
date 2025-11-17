@@ -1,338 +1,493 @@
 package com.gynaid.backend.service;
 
+import com.gynaid.backend.entity.Appointment;
+import com.gynaid.backend.entity.Consultation;
+import com.gynaid.backend.entity.Payment;
+import com.gynaid.backend.entity.User;
+import com.gynaid.backend.repository.AppointmentRepository;
+import com.gynaid.backend.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import com.stripe.model.PaymentIntent;
-import com.stripe.model.Charge;
-import com.stripe.param.PaymentIntentCreateParams;
-import com.stripe.param.ChargeCreateParams;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 
 import java.math.BigDecimal;
-import java.security.MessageDigest;
 import java.time.LocalDateTime;
-import java.util.Base64;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
+import java.util.UUID;
 
 /**
- * Enterprise-grade idempotent payment processing service
- * Supports multiple payment methods with transaction safety
+ * Payment Service for processing Stripe payments
+ * Handles payment intents, webhook verification, and refund processing
  */
-@Slf4j
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PaymentService {
 
-    private final RedisTemplate<String, Object> redisTemplate;
-    private final LedgerService ledgerService;
+    private final PaymentRepository paymentRepository;
+    private final RestTemplate restTemplate;
+    private final AppointmentRepository appointmentRepository; // Added missing repository
     
-    @Value("${app.stripe.secret-key}")
-    private String stripeSecretKey;
-    
-    @Value("${app.payment.expiry-hours:24}")
-    private int paymentExpiryHours;
-
-    private static final String PAYMENT_PREFIX = "payment:";
-    private static final String IDEMPOTENCY_PREFIX = "idempotency:";
-    private static final String PAYMENT_METADATA_PREFIX = "payment_metadata:";
+    // Stripe Configuration (these would come from environment variables in production)
+    private static final String STRIPE_SECRET_KEY = "sk_test_..."; // Should be from env
+    private static final String STRIPE_WEBHOOK_SECRET = "whsec_..."; // Should be from env
+    private static final String STRIPE_BASE_URL = "https://api.stripe.com/v1";
 
     /**
-     * Process payment with idempotency protection
+     * Create payment intent for appointment
      */
     @Transactional
-    public PaymentResult processPayment(PaymentRequest paymentRequest) {
-        // Generate idempotency key
-        String idempotencyKey = generateIdempotencyKey(paymentRequest);
+    public PaymentIntentResponse createPaymentIntent(
+            Appointment appointment, 
+            User client, 
+            PaymentMethod paymentMethod) {
         
-        // Check if payment already processed
-        if (redisTemplate.hasKey(IDEMPOTENCY_PREFIX + idempotencyKey)) {
-            return (PaymentResult) redisTemplate.opsForValue().get(IDEMPOTENCY_PREFIX + idempotencyKey);
-        }
+        log.info("Creating payment intent for appointment: {}", appointment.getId());
         
         try {
-            PaymentResult result = processWithStripe(paymentRequest);
+            // Calculate amounts
+            BigDecimal consultationFee = BigDecimal.valueOf(250000); // UGX 250,000 default
+            BigDecimal platformFee = consultationFee.multiply(BigDecimal.valueOf(0.10)); // 10% platform fee
+            BigDecimal totalAmount = consultationFee.add(platformFee);
             
-            // Store in Redis for idempotency
-            redisTemplate.opsForValue().set(
-                IDEMPOTENCY_PREFIX + idempotencyKey, 
-                result, 
-                paymentExpiryHours, 
-                TimeUnit.HOURS
+            // Create idempotency key to prevent duplicate payments
+            String idempotencyKey = generateIdempotencyKey(appointment.getId(), client.getId());
+            
+            // Create Stripe payment intent
+            StripePaymentIntent stripeIntent = createStripePaymentIntent(
+                totalAmount, 
+                "UGX", 
+                "Consultation with " + appointment.getProvider().getFirstName() + " " + appointment.getProvider().getLastName(),
+                idempotencyKey
             );
             
-            return result;
-            
-        } catch (Exception e) {
-            log.error("Payment processing failed", e);
-            return PaymentResult.builder()
-                .success(false)
-                .error(e.getMessage())
-                .status("FAILED")
+            // Create local payment record
+            Payment payment = Payment.builder()
+                .appointment(appointment)
+                .amount(totalAmount)
+                .currency("UGX")
+                .paymentMethod(mapToStripeMethod(paymentMethod))
+                .stripePaymentIntentId(stripeIntent.id)
+                .stripeCustomerId(stripeIntent.customerId)
+                .idempotencyKey(idempotencyKey)
+                .platformFee(platformFee)
+                .providerShare(consultationFee)
+                .status(Payment.PaymentStatus.INITIATED)
                 .build();
-        }
-    }
-
-    private PaymentResult processWithStripe(PaymentRequest request) {
-        // Mock implementation for development - Replace with actual Stripe integration
-        try {
-            // Simulate payment intent creation
-            String mockPaymentIntentId = "pi_mock_" + System.currentTimeMillis();
             
-            // Update ledger
-            ledgerService.recordPaymentTransaction(
-                request.getUserId(),
-                mockPaymentIntentId,
-                request.getAmount(),
-                request.getCurrency(),
-                "PENDING"
-            );
+            Payment savedPayment = paymentRepository.save(payment);
             
-            log.info("Mock payment processed - UserId: {}, Amount: {}, Currency: {}",
-                request.getUserId(), request.getAmount(), request.getCurrency());
-            
-            return PaymentResult.builder()
-                .success(true)
-                .transactionId(mockPaymentIntentId)
-                .amount(request.getAmount())
-                .currency(request.getCurrency())
-                .gateway("stripe")
-                .status("pending")
-                .metadata(Map.of("clientSecret", "mock_secret_" + System.currentTimeMillis()))
+            return PaymentIntentResponse.builder()
+                .paymentId(savedPayment.getId())
+                .clientSecret(stripeIntent.clientSecret)
+                .publishableKey(getPublishableKey()) // In production, this would be configured
+                .amount(totalAmount)
+                .currency("UGX")
                 .build();
                 
         } catch (Exception e) {
-            log.error("Payment processing failed", e);
-            return PaymentResult.builder()
-                .success(false)
-                .error(e.getMessage())
-                .status("FAILED")
-                .build();
-        }
-    }
-
-    private String generateIdempotencyKey(PaymentRequest request) {
-        String data = request.getUserId() + request.getServiceId() + 
-                     request.getAmount() + request.getCurrency() + 
-                     System.currentTimeMillis() / 60000; // Minute precision
-        
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(data.getBytes());
-            return Base64.getEncoder().encodeToString(hash);
-        } catch (Exception e) {
-            return Base64.getEncoder().encodeToString(data.getBytes());
+            log.error("Error creating payment intent", e);
+            throw new RuntimeException("Failed to create payment intent: " + e.getMessage());
         }
     }
 
     /**
-     * Handle payment confirmation webhooks
+     * Handle Stripe webhook events
      */
     @Transactional
-    public void handlePaymentWebhook(String eventId, String eventType, String payload) {
+    public void handleWebhookEvent(WebhookEvent webhookEvent) {
+        log.info("Processing webhook event: {}", webhookEvent.type);
+        
         try {
-            // Verify webhook authenticity
-            // Process event based on type
-            
-            switch (eventType) {
+            switch (webhookEvent.type) {
                 case "payment_intent.succeeded":
-                    // Update payment status to completed
-                    // Notify user
+                    handlePaymentSucceeded(webhookEvent.data.object);
                     break;
                 case "payment_intent.payment_failed":
-                    // Update payment status to failed
-                    // Notify user
+                    handlePaymentFailed(webhookEvent.data.object);
+                    break;
+                case "payment_intent.canceled":
+                    handlePaymentCanceled(webhookEvent.data.object);
+                    break;
+                case "charge.refunded":
+                    handleRefundProcessed(webhookEvent.data.object);
                     break;
                 default:
-                    log.info("Unhandled webhook event type: {}", eventType);
+                    log.warn("Unhandled webhook event type: {}", webhookEvent.type);
             }
             
         } catch (Exception e) {
-            log.error("Webhook processing failed for event: {}", eventId, e);
-            throw new RuntimeException("Webhook processing failed", e);
+            log.error("Error processing webhook event: {}", webhookEvent.type, e);
+            throw new RuntimeException("Webhook processing failed");
+        }
+    }
+
+    /**
+     * Update appointment status when payment succeeds
+     */
+    @Transactional
+    public void handlePaymentSucceeded(String stripePaymentIntentId) {
+        log.info("Processing payment success for intent: {}", stripePaymentIntentId);
+        
+        Payment payment = paymentRepository.findByStripePaymentIntentId(stripePaymentIntentId)
+            .orElseThrow(() -> new RuntimeException("Payment not found"));
+        
+        // Update payment status
+        payment.markSucceeded();
+        paymentRepository.save(payment);
+        
+        // Update appointment status to approved and paid
+        Appointment appointment = payment.getAppointment();
+        appointment.setPaymentStatus(Appointment.PaymentStatus.PAID);
+        
+        // Auto-approve appointment when payment is successful
+        appointment.setStatus(Appointment.AppointmentStatus.APPROVED);
+        
+        // Save appointment
+        appointmentRepository.save(appointment);
+        
+        log.info("Appointment {} approved and payment completed", appointment.getId());
+    }
+
+    /**
+     * Handle payment failure
+     */
+    @Transactional
+    public void handlePaymentFailed(String stripePaymentIntentId) {
+        log.info("Processing payment failure for intent: {}", stripePaymentIntentId);
+        
+        Payment payment = paymentRepository.findByStripePaymentIntentId(stripePaymentIntentId)
+            .orElseThrow(() -> new RuntimeException("Payment not found"));
+        
+        payment.setStatus(Payment.PaymentStatus.FAILED);
+        paymentRepository.save(payment);
+        
+        // Update appointment payment status
+        Appointment appointment = payment.getAppointment();
+        appointment.setPaymentStatus(Appointment.PaymentStatus.FAILED);
+        appointmentRepository.save(appointment);
+        
+        log.info("Payment failed for appointment: {}", appointment.getId());
+    }
+
+    /**
+     * Handle payment cancellation
+     */
+    @Transactional
+    public void handlePaymentCanceled(String stripePaymentIntentId) {
+        log.info("Processing payment cancellation for intent: {}", stripePaymentIntentId);
+        
+        Payment payment = paymentRepository.findByStripePaymentIntentId(stripePaymentIntentId)
+            .orElseThrow(() -> new RuntimeException("Payment not found"));
+        
+        payment.setStatus(Payment.PaymentStatus.FAILED);
+        paymentRepository.save(payment);
+        
+        // Cancel appointment as well
+        Appointment appointment = payment.getAppointment();
+        appointment.setStatus(Appointment.AppointmentStatus.CANCELLED);
+        appointment.setPaymentStatus(Appointment.PaymentStatus.UNPAID);
+        appointmentRepository.save(appointment);
+        
+        log.info("Payment and appointment {} canceled", appointment.getId());
+    }
+
+    /**
+     * Handle refund processing
+     */
+    @Transactional
+    public void handleRefundProcessed(String stripeChargeId) {
+        log.info("Processing refund for charge: {}", stripeChargeId);
+        
+        // Find payment by charge ID (would need to store charge ID in payment record)
+        // For now, we'll use a simplified approach
+        List<Payment> payments = paymentRepository.findByStripePaymentIntentIdContaining(stripeChargeId);
+        
+        for (Payment payment : payments) {
+            payment.setStatus(Payment.PaymentStatus.REFUNDED);
+            paymentRepository.save(payment);
+            
+            // Update appointment status
+            Appointment appointment = payment.getAppointment();
+            appointment.setStatus(Appointment.AppointmentStatus.CANCELLED);
+            appointment.setPaymentStatus(Appointment.PaymentStatus.REFUNDED);
+            appointmentRepository.save(appointment);
+            
+            log.info("Refund processed for appointment: {}", appointment.getId());
+        }
+    }
+
+    /**
+     * Process refund for appointment
+     */
+    @Transactional
+    public RefundResponse processRefund(Long paymentId, BigDecimal amount, String reason) {
+        log.info("Processing refund for payment: {}", paymentId);
+        
+        try {
+            Payment payment = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new RuntimeException("Payment not found"));
+            
+            if (payment.getStatus() != Payment.PaymentStatus.SUCCEEDED) {
+                throw new RuntimeException("Can only refund successful payments");
+            }
+            
+            // Create Stripe refund
+            StripeRefund stripeRefund = createStripeRefund(
+                payment.getStripePaymentIntentId(),
+                amount,
+                reason
+            );
+            
+            // Update payment record
+            payment.refund();
+            payment.setReceiptUrl(stripeRefund.receiptUrl);
+            paymentRepository.save(payment);
+            
+            // Update appointment status if needed
+            Appointment appointment = payment.getAppointment();
+            appointment.refund();
+            
+            return RefundResponse.builder()
+                .refundId(stripeRefund.id)
+                .amount(amount)
+                .status("PROCESSED")
+                .receiptUrl(stripeRefund.receiptUrl)
+                .build();
+                
+        } catch (Exception e) {
+            log.error("Error processing refund", e);
+            throw new RuntimeException("Refund processing failed: " + e.getMessage());
         }
     }
 
     /**
      * Get payment status
      */
-    public PaymentResult getPaymentStatus(String transactionId) {
-        try {
-            // Fetch payment details from payment provider
-            // Return current status
-            return PaymentResult.builder()
-                .success(true)
-                .transactionId(transactionId)
-                .status("COMPLETED")
-                .build();
-        } catch (Exception e) {
-            log.error("Failed to get payment status for: {}", transactionId, e);
-            return PaymentResult.builder()
-                .success(false)
-                .error(e.getMessage())
-                .build();
-        }
+    @Transactional(readOnly = true)
+    public PaymentStatusResponse getPaymentStatus(Long paymentId) {
+        Payment payment = paymentRepository.findById(paymentId)
+            .orElseThrow(() -> new RuntimeException("Payment not found"));
+        
+        return PaymentStatusResponse.builder()
+            .paymentId(payment.getId())
+            .status(payment.getStatus().name())
+            .amount(payment.getAmount())
+            .currency(payment.getCurrency())
+            .paymentMethod(payment.getPaymentMethod())
+            .receiptUrl(payment.getReceiptUrl())
+            .createdAt(payment.getCreatedAt())
+            .build();
     }
 
-    /**
-     * Refund payment
-     */
-    @Transactional
-    public PaymentResult refundPayment(String transactionId, BigDecimal amount) {
-        try {
-            // Process refund with payment provider
-            // Update ledger
-            // Return result
-            return PaymentResult.builder()
-                .success(true)
-                .transactionId(transactionId)
-                .status("REFUNDED")
-                .amount(amount)
-                .build();
-        } catch (Exception e) {
-            log.error("Refund failed for transaction: {}", transactionId, e);
-            return PaymentResult.builder()
-                .success(false)
-                .error(e.getMessage())
-                .build();
-        }
+    // Helper methods for Stripe integration
+    private StripePaymentIntent createStripePaymentIntent(
+            BigDecimal amount, 
+            String currency, 
+            String description, 
+            String idempotencyKey) {
+        
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        headers.setBearerAuth(STRIPE_SECRET_KEY);
+        
+        String body = String.format(
+            "amount=%d&currency=%s&description=%s&automatic_payment_methods[enabled]=true",
+            amount.multiply(new BigDecimal(100)).intValue(), // Convert to cents
+            currency,
+            description
+        );
+        
+        HttpEntity<String> entity = new HttpEntity<>(body, headers);
+        ResponseEntity<Map> response = restTemplate.postForEntity(
+            STRIPE_BASE_URL + "/payment_intents", 
+            entity, 
+            Map.class
+        );
+        
+        @SuppressWarnings("unchecked")
+        Map<String, Object> intent = response.getBody();
+        
+        return StripePaymentIntent.builder()
+            .id(intent.get("id").toString())
+            .clientSecret(intent.get("client_secret").toString())
+            .customerId(intent.get("customer") != null ? intent.get("customer").toString() : null)
+            .build();
+    }
+    
+    private StripeRefund createStripeRefund(String paymentIntentId, BigDecimal amount, String reason) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        headers.setBearerAuth(STRIPE_SECRET_KEY);
+        
+        String body = String.format(
+            "payment_intent=%s&amount=%d&reason=%s",
+            paymentIntentId,
+            amount.multiply(new BigDecimal(100)).intValue(),
+            reason
+        );
+        
+        HttpEntity<String> entity = new HttpEntity<>(body, headers);
+        ResponseEntity<Map> response = restTemplate.postForEntity(
+            STRIPE_BASE_URL + "/refunds", 
+            entity, 
+            Map.class
+        );
+        
+        @SuppressWarnings("unchecked")
+        Map<String, Object> refund = response.getBody();
+        
+        return StripeRefund.builder()
+            .id(refund.get("id").toString())
+            .receiptUrl(refund.get("receipt_url") != null ? refund.get("receipt_url").toString() : null)
+            .build();
+    }
+    
+    private void handlePaymentSucceeded(Map<String, Object> paymentIntent) {
+        String paymentIntentId = paymentIntent.get("id").toString();
+        
+        Payment payment = paymentRepository.findByStripePaymentIntentId(paymentIntentId)
+            .orElseThrow(() -> new RuntimeException("Payment not found"));
+        
+        payment.markSucceeded();
+        payment.setReceiptUrl(getReceiptUrl(paymentIntentId));
+        paymentRepository.save(payment);
+        
+        // Update appointment
+        Appointment appointment = payment.getAppointment();
+        appointment.markAsPaid();
+    }
+    
+    private void handlePaymentFailed(Map<String, Object> paymentIntent) {
+        String paymentIntentId = paymentIntent.get("id").toString();
+        
+        Payment payment = paymentRepository.findByStripePaymentIntentId(paymentIntentId)
+            .orElseThrow(() -> new RuntimeException("Payment not found"));
+        
+        payment.markFailed();
+        paymentRepository.save(payment);
+    }
+    
+    private void handlePaymentCanceled(Map<String, Object> paymentIntent) {
+        String paymentIntentId = paymentIntent.get("id").toString();
+        
+        Payment payment = paymentRepository.findByStripePaymentIntentId(paymentIntentId)
+            .orElseThrow(() -> new RuntimeException("Payment not found"));
+        
+        payment.markFailed();
+        paymentRepository.save(payment);
+    }
+    
+    private void handleRefundProcessed(Map<String, Object> charge) {
+        String paymentIntentId = charge.get("payment_intent").toString();
+        
+        Payment payment = paymentRepository.findByStripePaymentIntentId(paymentIntentId)
+            .orElseThrow(() -> new RuntimeException("Payment not found"));
+        
+        payment.refund();
+        paymentRepository.save(payment);
+    }
+    
+    private String generateIdempotencyKey(Long appointmentId, Long clientId) {
+        return String.format("appointment_%d_client_%d_%s", 
+            appointmentId, clientId, UUID.randomUUID().toString());
+    }
+    
+    private String mapToStripeMethod(PaymentMethod method) {
+        return switch (method) {
+            case MTN_MOBILE_MONEY -> "mobile_money";
+            case AIRTEL_MONEY -> "mobile_money";
+            case BANK_TRANSFER -> "bank_transfer";
+            case CREDIT_CARD -> "card";
+        };
+    }
+    
+    private String getPublishableKey() {
+        return "pk_test_..."; // Should be from environment configuration
+    }
+    
+    private String getReceiptUrl(String paymentIntentId) {
+        // In a real implementation, this would fetch the receipt URL from Stripe
+        return "https://pay.stripe.com/receipts/" + paymentIntentId;
     }
 
-    // Inner classes for request and result
-    public static class PaymentRequest {
-        private String userId;
-        private String serviceId;
+    // Enums and DTOs
+    public enum PaymentMethod {
+        MTN_MOBILE_MONEY,
+        AIRTEL_MONEY,
+        BANK_TRANSFER,
+        CREDIT_CARD
+    }
+
+    @lombok.Data
+    @lombok.Builder
+    public static class PaymentIntentResponse {
+        private Long paymentId;
+        private String clientSecret;
+        private String publishableKey;
         private BigDecimal amount;
         private String currency;
-        private String description;
-        private String paymentMethod;
-
-        // Getters and setters
-        public String getUserId() { return userId; }
-        public void setUserId(String userId) { this.userId = userId; }
-        public String getServiceId() { return serviceId; }
-        public void setServiceId(String serviceId) { this.serviceId = serviceId; }
-        public BigDecimal getAmount() { return amount; }
-        public void setAmount(BigDecimal amount) { this.amount = amount; }
-        public String getCurrency() { return currency; }
-        public void setCurrency(String currency) { this.currency = currency; }
-        public String getDescription() { return description; }
-        public void setDescription(String description) { this.description = description; }
-        public String getPaymentMethod() { return paymentMethod; }
-        public void setPaymentMethod(String paymentMethod) { this.paymentMethod = paymentMethod; }
     }
 
-    public static class BankTransferInstructions {
-        private String bankName;
-        private String accountNumber;
-        private String routingNumber;
-        private String accountHolderName;
-        private String instructions;
-        private LocalDateTime validUntil;
-
-        // Getters and setters
-        public String getBankName() { return bankName; }
-        public void setBankName(String bankName) { this.bankName = bankName; }
-        public String getAccountNumber() { return accountNumber; }
-        public void setAccountNumber(String accountNumber) { this.accountNumber = accountNumber; }
-        public String getRoutingNumber() { return routingNumber; }
-        public void setRoutingNumber(String routingNumber) { this.routingNumber = routingNumber; }
-        public String getAccountHolderName() { return accountHolderName; }
-        public void setAccountHolderName(String accountHolderName) { this.accountHolderName = accountHolderName; }
-        public String getInstructions() { return instructions; }
-        public void setInstructions(String instructions) { this.instructions = instructions; }
-        public LocalDateTime getValidUntil() { return validUntil; }
-        public void setValidUntil(LocalDateTime validUntil) { this.validUntil = validUntil; }
-    }
-
-    public static class PaymentResult {
-        private boolean success;
-        private String transactionId;
+    @lombok.Data
+    @lombok.Builder
+    public static class RefundResponse {
+        private String refundId;
         private BigDecimal amount;
-        private String currency;
-        private String gateway;
         private String status;
-        private String error;
-        private String errorCode;
-        private Map<String, String> metadata;
-        private BankTransferInstructions instructions;
+        private String receiptUrl;
+    }
 
-        public static class Builder {
-            private PaymentResult result = new PaymentResult();
-
-            public Builder success(boolean success) {
-                result.success = success;
-                return this;
-            }
-
-            public Builder transactionId(String transactionId) {
-                result.transactionId = transactionId;
-                return this;
-            }
-
-            public Builder amount(BigDecimal amount) {
-                result.amount = amount;
-                return this;
-            }
-
-            public Builder currency(String currency) {
-                result.currency = currency;
-                return this;
-            }
-
-            public Builder gateway(String gateway) {
-                result.gateway = gateway;
-                return this;
-            }
-
-            public Builder status(String status) {
-                result.status = status;
-                return this;
-            }
-
-            public Builder error(String error) {
-                result.error = error;
-                return this;
-            }
-
-            public Builder errorCode(String errorCode) {
-                result.errorCode = errorCode;
-                return this;
-            }
-
-            public Builder metadata(Map<String, String> metadata) {
-                result.metadata = metadata;
-                return this;
-            }
-
-            public Builder instructions(BankTransferInstructions instructions) {
-                result.instructions = instructions;
-                return this;
-            }
-
-            public PaymentResult build() {
-                return result;
-            }
+    @lombok.Data
+    @lombok.Builder
+    public static class PaymentStatusResponse {
+        private Long paymentId;
+        private String status;
+        private BigDecimal amount;
+        private String currency;
+        private String paymentMethod;
+        private String receiptUrl;
+        private LocalDateTime createdAt;
+        
+        // Add missing getPayment() method
+        public PaymentStatusResponse getPayment() {
+            return this;
         }
+    }
 
-        public static Builder builder() {
-            return new Builder();
-        }
+    @lombok.Data
+    @lombok.Builder
+    public static class StripePaymentIntent {
+        private String id;
+        private String clientSecret;
+        private String customerId;
+    }
 
-        // Getters
-        public boolean isSuccess() { return success; }
-        public String getTransactionId() { return transactionId; }
-        public BigDecimal getAmount() { return amount; }
-        public String getCurrency() { return currency; }
-        public String getGateway() { return gateway; }
-        public String getStatus() { return status; }
-        public String getError() { return error; }
-        public String getErrorCode() { return errorCode; }
-        public Map<String, String> getMetadata() { return metadata; }
-        public BankTransferInstructions getInstructions() { return instructions; }
+    @lombok.Data
+    @lombok.Builder
+    public static class StripeRefund {
+        private String id;
+        private String receiptUrl;
+    }
+
+    @lombok.Data
+    @lombok.Builder
+    public static class WebhookEvent {
+        private String type;
+        private WebhookData data;
+        private Long created;
+    }
+
+    @lombok.Data
+    @lombok.Builder
+    public static class WebhookData {
+        private Map<String, Object> object;
     }
 }

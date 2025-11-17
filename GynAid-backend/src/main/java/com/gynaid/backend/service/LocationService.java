@@ -24,6 +24,19 @@ public class LocationService {
 
     @Autowired
     private ProviderLocationRepository providerLocationRepository;
+    /**
+     * Creates a Point from latitude and longitude coordinates
+     * 
+     * @param latitude the latitude
+     * @param longitude the longitude
+     * @return a Point geometry
+     */
+    public Point createPoint(Double latitude, Double longitude) {
+        if (latitude == null || longitude == null) {
+            throw new IllegalArgumentException("Latitude and longitude cannot be null");
+        }
+        return LocationUtils.toPoint(latitude, longitude);
+    }
 
     /**
      * Updates the latitude and longitude of a provider by User ID.

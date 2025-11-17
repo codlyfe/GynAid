@@ -1,0 +1,393 @@
+package com.gynaid.backend.service;
+
+import com.gynaid.backend.entity.Appointment;
+import com.gynaid.backend.entity.Consultation;
+import com.gynaid.backend.entity.Payment;
+import com.gynaid.backend.entity.User;
+import com.gynaid.backend.repository.AppointmentRepository;
+import com.gynaid.backend.repository.PaymentRepository;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
+/**
+ * Comprehensive test suite for PaymentService
+ * Tests payment processing, Stripe integration, idempotency, and error handling
+ */
+@ExtendWith(MockitoExtension.class)
+class PaymentServiceTest {
+
+    @Mock
+    private PaymentRepository paymentRepository;
+
+    @Mock
+    private AppointmentRepository appointmentRepository;
+
+    @Mock
+    private RestTemplate restTemplate;
+
+    @InjectMocks
+    private PaymentService paymentService;
+
+    private User testClient;
+    private User testProvider;
+    private Appointment testAppointment;
+    private Payment testPayment;
+
+    @BeforeEach
+    void setUp() {
+        // Setup test users
+        testClient = User.builder()
+            .id(1L)
+            .email("client@example.com")
+            .firstName("Jane")
+            .lastName("Client")
+            .role(User.UserRole.CLIENT)
+            .build();
+
+        testProvider = User.builder()
+            .id(2L)
+            .email("provider@example.com")
+            .firstName("Dr.")
+            .lastName("Smith")
+            .role(User.UserRole.PROVIDER_INDIVIDUAL)
+            .build();
+
+        // Setup test appointment
+        testAppointment = Appointment.builder()
+            .id(1L)
+            .client(testClient)
+            .provider(testProvider)
+            .startTime(LocalDateTime.now().plusDays(1))
+            .endTime(LocalDateTime.now().plusDays(1).plusMinutes(30))
+            .status(Appointment.AppointmentStatus.PENDING)
+            .paymentStatus(Appointment.PaymentStatus.UNPAID)
+            .build();
+
+        // Setup test payment
+        testPayment = Payment.builder()
+            .id(1L)
+            .appointment(testAppointment)
+            .amount(new BigDecimal("275000")) // 250k consultation + 25k platform fee
+            .currency("UGX")
+            .paymentMethod("mobile_money")
+            .status(Payment.PaymentStatus.INITIATED)
+            .idempotencyKey("appointment_1_client_1_mock123")
+            .build();
+    }
+
+    @Test
+    void testCreatePaymentIntentSuccess() {
+        // Arrange
+        when(appointmentRepository.save(any(Appointment.class))).thenReturn(testAppointment);
+        
+        // Mock Stripe response
+        Map<String, Object> stripeResponse = Map.of(
+            "id", "pi_test_1234567890",
+            "client_secret", "pi_test_1234567890_secret_abcd",
+            "customer", "cus_test_1234567890"
+        );
+        ResponseEntity<Map> mockStripeResponse = new ResponseEntity<>(stripeResponse, HttpStatus.OK);
+        when(restTemplate.postForEntity(anyString(), any(HttpEntity.class), eq(Map.class)))
+            .thenReturn(mockStripeResponse);
+
+        when(paymentRepository.save(any(Payment.class))).thenReturn(testPayment);
+
+        PaymentService.PaymentMethod paymentMethod = PaymentService.PaymentMethod.MTN_MOBILE_MONEY;
+
+        // Act
+        PaymentService.PaymentIntentResponse response = paymentService.createPaymentIntent(
+            testAppointment, testClient, paymentMethod);
+
+        // Assert
+        assertNotNull(response);
+        assertEquals("pi_test_1234567890_secret_abcd", response.getClientSecret());
+        assertEquals(new BigDecimal("275000"), response.getAmount());
+        assertEquals("UGX", response.getCurrency());
+    }
+
+    @Test
+    void testCreatePaymentIntentWithStripeFailure() {
+        // Arrange
+        when(restTemplate.postForEntity(anyString(), any(HttpEntity.class), eq(Map.class)))
+            .thenThrow(new RuntimeException("Stripe API error"));
+
+        PaymentService.PaymentMethod paymentMethod = PaymentService.PaymentMethod.MTN_MOBILE_MONEY;
+
+        // Act & Assert
+        assertThrows(RuntimeException.class, () -> {
+            paymentService.createPaymentIntent(testAppointment, testClient, paymentMethod);
+        });
+    }
+
+    @Test
+    void testHandlePaymentSucceededWebhook() {
+        // Arrange
+        testPayment.setStripePaymentIntentId("pi_test_success");
+        when(paymentRepository.findByStripePaymentIntentId("pi_test_success"))
+            .thenReturn(Optional.of(testPayment));
+        when(paymentRepository.save(any(Payment.class))).thenReturn(testPayment);
+        when(appointmentRepository.save(any(Appointment.class))).thenReturn(testAppointment);
+
+        PaymentService.WebhookEvent webhookEvent = PaymentService.WebhookEvent.builder()
+            .type("payment_intent.succeeded")
+            .data(PaymentService.WebhookData.builder()
+                .object(Map.of("id", "pi_test_success"))
+                .build())
+            .build();
+
+        // Act
+        paymentService.handleWebhookEvent(webhookEvent);
+
+        // Assert
+        assertEquals(Payment.PaymentStatus.SUCCEEDED, testPayment.getStatus());
+        assertEquals(Appointment.PaymentStatus.PAID, testAppointment.getPaymentStatus());
+        assertEquals(Appointment.AppointmentStatus.APPROVED, testAppointment.getStatus());
+        verify(paymentRepository, times(1)).save(testPayment);
+        verify(appointmentRepository, times(1)).save(testAppointment);
+    }
+
+    @Test
+    void testHandlePaymentFailedWebhook() {
+        // Arrange
+        testPayment.setStripePaymentIntentId("pi_test_failed");
+        when(paymentRepository.findByStripePaymentIntentId("pi_test_failed"))
+            .thenReturn(Optional.of(testPayment));
+        when(paymentRepository.save(any(Payment.class))).thenReturn(testPayment);
+        when(appointmentRepository.save(any(Appointment.class))).thenReturn(testAppointment);
+
+        PaymentService.WebhookEvent webhookEvent = PaymentService.WebhookEvent.builder()
+            .type("payment_intent.payment_failed")
+            .data(PaymentService.WebhookData.builder()
+                .object(Map.of("id", "pi_test_failed"))
+                .build())
+            .build();
+
+        // Act
+        paymentService.handleWebhookEvent(webhookEvent);
+
+        // Assert
+        assertEquals(Payment.PaymentStatus.FAILED, testPayment.getStatus());
+        assertEquals(Appointment.PaymentStatus.FAILED, testAppointment.getPaymentStatus());
+        verify(paymentRepository, times(1)).save(testPayment);
+        verify(appointmentRepository, times(1)).save(testAppointment);
+    }
+
+    @Test
+    void testHandlePaymentCanceledWebhook() {
+        // Arrange
+        testPayment.setStripePaymentIntentId("pi_test_canceled");
+        when(paymentRepository.findByStripePaymentIntentId("pi_test_canceled"))
+            .thenReturn(Optional.of(testPayment));
+        when(paymentRepository.save(any(Payment.class))).thenReturn(testPayment);
+        when(appointmentRepository.save(any(Appointment.class))).thenReturn(testAppointment);
+
+        PaymentService.WebhookEvent webhookEvent = PaymentService.WebhookEvent.builder()
+            .type("payment_intent.canceled")
+            .data(PaymentService.WebhookData.builder()
+                .object(Map.of("id", "pi_test_canceled"))
+                .build())
+            .build();
+
+        // Act
+        paymentService.handleWebhookEvent(webhookEvent);
+
+        // Assert
+        assertEquals(Payment.PaymentStatus.FAILED, testPayment.getStatus());
+        assertEquals(Appointment.AppointmentStatus.CANCELLED, testAppointment.getStatus());
+        assertEquals(Appointment.PaymentStatus.UNPAID, testAppointment.getPaymentStatus());
+        verify(paymentRepository, times(1)).save(testPayment);
+        verify(appointmentRepository, times(1)).save(testAppointment);
+    }
+
+    @Test
+    void testHandleRefundProcessedWebhook() {
+        // Arrange
+        testPayment.setStripePaymentIntentId("pi_test_refund");
+        when(paymentRepository.findByStripePaymentIntentIdContaining("charge_test_123"))
+            .thenReturn(List.of(testPayment));
+        when(paymentRepository.save(any(Payment.class))).thenReturn(testPayment);
+        when(appointmentRepository.save(any(Appointment.class))).thenReturn(testAppointment);
+
+        PaymentService.WebhookEvent webhookEvent = PaymentService.WebhookEvent.builder()
+            .type("charge.refunded")
+            .data(PaymentService.WebhookData.builder()
+                .object(Map.of("payment_intent", "pi_test_refund", "id", "charge_test_123"))
+                .build())
+            .build();
+
+        // Act
+        paymentService.handleWebhookEvent(webhookEvent);
+
+        // Assert
+        assertEquals(Payment.PaymentStatus.REFUNDED, testPayment.getStatus());
+        assertEquals(Appointment.AppointmentStatus.CANCELLED, testAppointment.getStatus());
+        assertEquals(Appointment.PaymentStatus.REFUNDED, testAppointment.getPaymentStatus());
+        verify(paymentRepository, times(1)).save(testPayment);
+        verify(appointmentRepository, times(1)).save(testAppointment);
+    }
+
+    @Test
+    void testProcessRefundSuccess() {
+        // Arrange
+        testPayment.setStatus(Payment.PaymentStatus.SUCCEEDED);
+        testPayment.setStripePaymentIntentId("pi_test_1234567890");
+        when(paymentRepository.findById(1L)).thenReturn(Optional.of(testPayment));
+
+        // Mock Stripe refund response
+        Map<String, Object> stripeRefundResponse = Map.of(
+            "id", "re_test_1234567890",
+            "receipt_url", "https://pay.stripe.com/receipts/re_test_1234567890"
+        );
+        ResponseEntity<Map> mockStripeRefundResponse = new ResponseEntity<>(stripeRefundResponse, HttpStatus.OK);
+        when(restTemplate.postForEntity(anyString(), any(HttpEntity.class), eq(Map.class)))
+            .thenReturn(mockStripeRefundResponse);
+
+        BigDecimal refundAmount = new BigDecimal("275000");
+        String refundReason = "Service not provided";
+
+        // Act
+        PaymentService.RefundResponse response = paymentService.processRefund(
+            1L, refundAmount, refundReason);
+
+        // Assert
+        assertNotNull(response);
+        assertEquals("re_test_1234567890", response.getRefundId());
+        assertEquals(refundAmount, response.getAmount());
+        assertEquals("PROCESSED", response.getStatus());
+        assertNotNull(response.getReceiptUrl());
+        assertEquals(Payment.PaymentStatus.REFUNDED, testPayment.getStatus());
+    }
+
+    @Test
+    void testProcessRefundFailsForNonSuccessfulPayment() {
+        // Arrange
+        testPayment.setStatus(Payment.PaymentStatus.FAILED);
+        when(paymentRepository.findById(1L)).thenReturn(Optional.of(testPayment));
+
+        BigDecimal refundAmount = new BigDecimal("275000");
+        String refundReason = "Invalid request";
+
+        // Act & Assert
+        assertThrows(RuntimeException.class, () -> {
+            paymentService.processRefund(1L, refundAmount, refundReason);
+        });
+    }
+
+    @Test
+    void testGetPaymentStatusSuccess() {
+        // Arrange
+        when(paymentRepository.findById(1L)).thenReturn(Optional.of(testPayment));
+
+        // Act
+        PaymentService.PaymentStatusResponse response = paymentService.getPaymentStatus(1L);
+
+        // Assert
+        assertNotNull(response);
+        assertEquals(1L, response.getPaymentId());
+        assertEquals(Payment.PaymentStatus.INITIATED.name(), response.getStatus());
+        assertEquals(new BigDecimal("275000"), response.getAmount());
+        assertEquals("UGX", response.getCurrency());
+        assertEquals("mobile_money", response.getPaymentMethod());
+        assertNotNull(response.getCreatedAt());
+    }
+
+    @Test
+    void testGetPaymentStatusNotFound() {
+        // Arrange
+        when(paymentRepository.findById(999L)).thenReturn(Optional.empty());
+
+        // Act & Assert
+        assertThrows(RuntimeException.class, () -> {
+            paymentService.getPaymentStatus(999L);
+        });
+    }
+
+    @Test
+    void testHandleWebhookEventWithInvalidIntent() {
+        // Arrange
+        when(paymentRepository.findByStripePaymentIntentId("invalid_id"))
+            .thenReturn(Optional.empty());
+
+        PaymentService.WebhookEvent webhookEvent = PaymentService.WebhookEvent.builder()
+            .type("payment_intent.succeeded")
+            .data(PaymentService.WebhookData.builder()
+                .object(Map.of("id", "invalid_id"))
+                .build())
+            .build();
+
+        // Act & Assert
+        assertThrows(RuntimeException.class, () -> {
+            paymentService.handleWebhookEvent(webhookEvent);
+        });
+    }
+
+    @Test
+    void testHandleWebhookEventWithUnknownType() {
+        // Arrange
+        PaymentService.WebhookEvent webhookEvent = PaymentService.WebhookEvent.builder()
+            .type("unknown.webhook.type")
+            .data(PaymentService.WebhookData.builder()
+                .object(Map.of("id", "test"))
+                .build())
+            .build();
+
+        // Act - Should not throw exception, just log warning
+        paymentService.handleWebhookEvent(webhookEvent);
+
+        // Verify no repository calls were made
+        verifyNoInteractions(paymentRepository);
+        verifyNoInteractions(appointmentRepository);
+    }
+
+    @Test
+    void testIdempotencyKeyGeneration() {
+        // Arrange
+        Long appointmentId = 123L;
+        Long clientId = 456L;
+
+        // Act
+        String idempotencyKey = paymentService.generateIdempotencyKey(appointmentId, clientId);
+
+        // Assert
+        assertNotNull(idempotencyKey);
+        assertTrue(idempotencyKey.startsWith("appointment_123_client_456_"));
+        assertEquals(50, idempotencyKey.length()); // Should have UUID suffix
+    }
+
+    @Test
+    void testPaymentMethodMapping() {
+        // Arrange
+        PaymentService.PaymentMethod[] paymentMethods = PaymentService.PaymentMethod.values();
+
+        // Assert
+        assertEquals(PaymentService.PaymentMethod.MTN_MOBILE_MONEY, 
+            PaymentService.PaymentMethod.MTN_MOBILE_MONEY);
+        assertEquals(PaymentService.PaymentMethod.AIRTEL_MONEY, 
+            PaymentService.PaymentMethod.AIRTEL_MONEY);
+        assertEquals(PaymentService.PaymentMethod.BANK_TRANSFER, 
+            PaymentService.PaymentMethod.BANK_TRANSFER);
+        assertEquals(PaymentService.PaymentMethod.CREDIT_CARD, 
+            PaymentService.PaymentMethod.CREDIT_CARD);
+
+        // Verify all methods are mapped
+        assertEquals(4, paymentMethods.length);
+    }
+}

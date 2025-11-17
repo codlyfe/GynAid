@@ -98,6 +98,11 @@ public class ProviderVerification {
         EXPIRED,
         SUSPENDED
     }
+
+    // Add missing method for compatibility
+    public boolean isVerified() {
+        return verificationStatus == VerificationStatus.VERIFIED;
+    }
 }
 
 

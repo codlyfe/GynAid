@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 
@@ -44,7 +45,7 @@ public class ConsultationService {
             // Create consultation with proper enum conversion
             Consultation consultation = Consultation.builder()
                 .client(client)
-                .provider(provider)
+                .provider(provider.getUser())
                 .scheduledDateTime(request.getScheduledDateTime())
                 .type(request.getType()) // This is now Consultation.ConsultationType
                 .status(Consultation.ConsultationStatus.PENDING_PAYMENT)
@@ -131,6 +132,142 @@ public class ConsultationService {
         }
     }
 
+    /**
+     * Generate secure room ID for consultation
+     */
+    @Transactional
+    public String generateSecureRoomId(Long consultationId) {
+        log.info("Generating secure room ID for consultation: {}", consultationId);
+        
+        Consultation consultation = consultationRepository.findById(consultationId)
+            .orElseThrow(() -> new RuntimeException("Consultation not found"));
+        
+        // Generate secure room ID if not already exists
+        if (consultation.getRoomId() == null) {
+            String secureRoomId = generateSecureRoomId();
+            consultation.setRoomId(secureRoomId);
+            consultationRepository.save(consultation);
+            
+            log.info("Generated secure room ID: {} for consultation: {}", secureRoomId, consultationId);
+            return secureRoomId;
+        }
+        
+        return consultation.getRoomId();
+    }
+
+    /**
+     * Start consultation session
+     */
+    @Transactional
+    public Consultation startConsultationSession(Long consultationId, String userEmail) {
+        log.info("Starting consultation session: {} for user: {}", consultationId, userEmail);
+        
+        Consultation consultation = consultationRepository.findById(consultationId)
+            .orElseThrow(() -> new RuntimeException("Consultation not found"));
+        
+        // Verify user has access to this consultation
+        if (!consultation.getClient().getEmail().equals(userEmail) &&
+            !consultation.getProvider().getEmail().equals(userEmail)) {
+            throw new RuntimeException("Unauthorized access to consultation session");
+        }
+        
+        // Check if consultation is in the right status
+        if (consultation.getStatus() != Consultation.ConsultationStatus.SCHEDULED &&
+            consultation.getStatus() != Consultation.ConsultationStatus.IN_PROGRESS) {
+            throw new RuntimeException("Consultation is not ready to start");
+        }
+        
+        // Generate room ID if not exists
+        if (consultation.getRoomId() == null) {
+            String roomId = generateSecureRoomId();
+            consultation.setRoomId(roomId);
+        }
+        
+        // Update status to in progress
+        consultation.setStatus(Consultation.ConsultationStatus.IN_PROGRESS);
+        consultation.setActualStartTime(LocalDateTime.now());
+        
+        Consultation updated = consultationRepository.save(consultation);
+        
+        log.info("Consultation session started successfully: {}", consultationId);
+        return updated;
+    }
+
+    /**
+     * End consultation session
+     */
+    @Transactional
+    public Consultation endConsultationSession(Long consultationId, String userEmail, String notes) {
+        log.info("Ending consultation session: {} for user: {}", consultationId, userEmail);
+        
+        Consultation consultation = consultationRepository.findById(consultationId)
+            .orElseThrow(() -> new RuntimeException("Consultation not found"));
+        
+        // Verify user has access to this consultation
+        if (!consultation.getClient().getEmail().equals(userEmail) &&
+            !consultation.getProvider().getEmail().equals(userEmail)) {
+            throw new RuntimeException("Unauthorized access to consultation session");
+        }
+        
+        // Update status to completed
+        consultation.setStatus(Consultation.ConsultationStatus.COMPLETED);
+        consultation.setActualEndTime(LocalDateTime.now());
+        
+        // Add provider notes if provided by provider
+        if (notes != null && consultation.getProvider().getEmail().equals(userEmail)) {
+            consultation.setProviderNotes(notes);
+        }
+        
+        Consultation updated = consultationRepository.save(consultation);
+        
+        log.info("Consultation session ended successfully: {}", consultationId);
+        return updated;
+    }
+
+    /**
+     * Add consultation notes
+     */
+    @Transactional
+    public void addConsultationNotes(Long consultationId, String userEmail, String notes, boolean isProvider) {
+        log.info("Adding consultation notes for session: {} by user: {}", consultationId, userEmail);
+        
+        Consultation consultation = consultationRepository.findById(consultationId)
+            .orElseThrow(() -> new RuntimeException("Consultation not found"));
+        
+        // Verify user has access to this consultation
+        if (!consultation.getClient().getEmail().equals(userEmail) &&
+            !consultation.getProvider().getEmail().equals(userEmail)) {
+            throw new RuntimeException("Unauthorized access to consultation session");
+        }
+        
+        // Add notes based on who is adding them
+        if (isProvider) {
+            if (!consultation.getProvider().getEmail().equals(userEmail)) {
+                throw new RuntimeException("Only providers can add provider notes");
+            }
+            consultation.setProviderNotes(notes);
+        } else {
+            if (!consultation.getClient().getEmail().equals(userEmail)) {
+                throw new RuntimeException("Only clients can add client notes");
+            }
+            consultation.setClientNotes(notes);
+        }
+        
+        consultationRepository.save(consultation);
+        
+        log.info("Consultation notes added successfully for session: {}", consultationId);
+    }
+
+    /**
+     * Generate a secure random room ID
+     */
+    private String generateSecureRoomId() {
+        // Generate a secure room ID using UUID and timestamp
+        String uuid = java.util.UUID.randomUUID().toString().replace("-", "");
+        String timestamp = String.valueOf(System.currentTimeMillis());
+        return "GYNAID_" + uuid.substring(0, 8) + "_" + timestamp.substring(timestamp.length() - 6);
+    }
+
     public PaymentMethodsResponse getPaymentMethods(Long consultationId) {
         Consultation consultation = consultationRepository.findById(consultationId)
             .orElseThrow(() -> new RuntimeException("Consultation not found"));
@@ -173,6 +310,207 @@ public class ConsultationService {
             .totalAmount(consultation.getTotalAmount())
             .availableMethods(methods)
             .build();
+    }
+
+    // Session Management Methods
+    
+    @Transactional
+    public SessionStartResponse startConsultationSessionWithResponse(Long consultationId, String userEmail) {
+        try {
+            Consultation consultation = consultationRepository.findById(consultationId)
+                .orElseThrow(() -> new RuntimeException("Consultation not found"));
+            
+            // Verify user has permission to start session
+            if (!consultation.getClient().getEmail().equals(userEmail) && 
+                !consultation.getProvider().getEmail().equals(userEmail)) {
+                throw new RuntimeException("Unauthorized to start this consultation");
+            }
+            
+            // Check if session can start
+            if (!consultation.canStart()) {
+                return SessionStartResponse.builder()
+                    .success(false)
+                    .message("Consultation cannot be started yet")
+                    .allowedStartTime(consultation.getScheduledDateTime().minusMinutes(15))
+                    .build();
+            }
+            
+            // Start the session
+            consultation.startSession();
+            consultationRepository.save(consultation);
+            
+            log.info("Consultation session started: {}, room: {}", consultationId, consultation.getRoomId());
+            
+            return SessionStartResponse.builder()
+                .success(true)
+                .roomId(consultation.getRoomId())
+                .videoProvider(consultation.getVideoProvider())
+                .sessionUrl(generateSessionUrl(consultation.getRoomId()))
+                .message("Consultation session started successfully")
+                .build();
+                
+        } catch (Exception e) {
+            log.error("Failed to start consultation session: {}", consultationId, e);
+            return SessionStartResponse.builder()
+                .success(false)
+                .message("Failed to start session: " + e.getMessage())
+                .build();
+        }
+    }
+    
+    @Transactional
+    public SessionEndResponse endConsultationSession(Long consultationId, String userEmail, String notes, Integer rating) {
+        try {
+            Consultation consultation = consultationRepository.findById(consultationId)
+                .orElseThrow(() -> new RuntimeException("Consultation not found"));
+            
+            // Verify user has permission to end session
+            if (!consultation.getClient().getEmail().equals(userEmail) && 
+                !consultation.getProvider().getEmail().equals(userEmail)) {
+                throw new RuntimeException("Unauthorized to end this consultation");
+            }
+            
+            if (!consultation.canEnd()) {
+                return SessionEndResponse.builder()
+                    .success(false)
+                    .message("Session cannot be ended in current state: " + consultation.getStatus())
+                    .build();
+            }
+            
+            // Add notes if provided
+            if (notes != null && !notes.trim().isEmpty()) {
+                if (consultation.getClient().getEmail().equals(userEmail)) {
+                    consultation.addClientNotes(notes);
+                } else if (consultation.getProvider().getEmail().equals(userEmail)) {
+                    consultation.addProviderNotes(notes);
+                }
+            }
+            
+            // Add rating if provided
+            if (rating != null && rating >= 1 && rating <= 5) {
+                if (consultation.getClient().getEmail().equals(userEmail)) {
+                    consultation.setClientRating(rating);
+                } else if (consultation.getProvider().getEmail().equals(userEmail)) {
+                    consultation.setProviderRating(rating);
+                }
+            }
+            
+            // End the session
+            consultation.endSession();
+            consultationRepository.save(consultation);
+            
+            log.info("Consultation session ended: {}, duration: {} minutes", consultationId, consultation.getDurationMinutes());
+            
+            return SessionEndResponse.builder()
+                .success(true)
+                .durationMinutes(consultation.getDurationMinutes())
+                .endedAt(consultation.getEndTime())
+                .message("Consultation session ended successfully")
+                .build();
+                
+        } catch (Exception e) {
+            log.error("Failed to end consultation session: {}", consultationId, e);
+            return SessionEndResponse.builder()
+                .success(false)
+                .message("Failed to end session: " + e.getMessage())
+                .build();
+        }
+    }
+    
+    @Transactional
+    public CancelConsultationResponse cancelConsultation(Long consultationId, String userEmail, String reason) {
+        try {
+            Consultation consultation = consultationRepository.findById(consultationId)
+                .orElseThrow(() -> new RuntimeException("Consultation not found"));
+            
+            // Verify user can cancel
+            if (!consultation.getClient().getEmail().equals(userEmail) && 
+                !consultation.getProvider().getEmail().equals(userEmail)) {
+                throw new RuntimeException("Unauthorized to cancel this consultation");
+            }
+            
+            // Check if consultation can be cancelled
+            if (consultation.getStatus() == Consultation.ConsultationStatus.ACTIVE ||
+                consultation.getStatus() == Consultation.ConsultationStatus.ENDED) {
+                return CancelConsultationResponse.builder()
+                    .success(false)
+                    .message("Cannot cancel an active or completed consultation")
+                    .build();
+            }
+            
+            // Cancel the consultation
+            consultation.cancelSession(reason);
+            consultationRepository.save(consultation);
+            
+            log.info("Consultation cancelled: {}, reason: {}", consultationId, reason);
+            
+            return CancelConsultationResponse.builder()
+                .success(true)
+                .message("Consultation cancelled successfully")
+                .cancelledAt(consultation.getEndTime())
+                .build();
+                
+        } catch (Exception e) {
+            log.error("Failed to cancel consultation: {}", consultationId, e);
+            return CancelConsultationResponse.builder()
+                .success(false)
+                .message("Failed to cancel consultation: " + e.getMessage())
+                .build();
+        }
+    }
+    
+    @Transactional
+    public RescheduleConsultationResponse rescheduleConsultation(Long consultationId, String userEmail, LocalDateTime newDateTime) {
+        try {
+            Consultation consultation = consultationRepository.findById(consultationId)
+                .orElseThrow(() -> new RuntimeException("Consultation not found"));
+            
+            // Verify user can reschedule
+            if (!consultation.getClient().getEmail().equals(userEmail)) {
+                throw new RuntimeException("Only clients can reschedule consultations");
+            }
+            
+            // Check if consultation can be rescheduled
+            if (consultation.getStatus() == Consultation.ConsultationStatus.ACTIVE ||
+                consultation.getStatus() == Consultation.ConsultationStatus.ENDED) {
+                return RescheduleConsultationResponse.builder()
+                    .success(false)
+                    .message("Cannot reschedule an active or completed consultation")
+                    .build();
+            }
+            
+            // Validate new date time is in the future
+            if (newDateTime.isBefore(LocalDateTime.now().plusHours(1))) {
+                return RescheduleConsultationResponse.builder()
+                    .success(false)
+                    .message("New appointment time must be at least 1 hour in the future")
+                    .build();
+            }
+            
+            // Update the scheduled time
+            consultation.setScheduledDateTime(newDateTime);
+            consultationRepository.save(consultation);
+            
+            log.info("Consultation rescheduled: {} to {}", consultationId, newDateTime);
+            
+            return RescheduleConsultationResponse.builder()
+                .success(true)
+                .newDateTime(newDateTime)
+                .message("Consultation rescheduled successfully")
+                .build();
+                
+        } catch (Exception e) {
+            log.error("Failed to reschedule consultation: {}", consultationId, e);
+            return RescheduleConsultationResponse.builder()
+                .success(false)
+                .message("Failed to reschedule consultation: " + e.getMessage())
+                .build();
+        }
+    }
+    
+    private String generateSessionUrl(String roomId) {
+        // Generate session URL based on video provider
+        return "https://video.gynaid.com/room/" + roomId;
     }
 
     // Request/Response DTOs
@@ -388,5 +726,186 @@ public class ConsultationService {
         // Getters
         public BigDecimal getTotalAmount() { return totalAmount; }
         public List<PaymentMethodOption> getAvailableMethods() { return availableMethods; }
+    }
+
+    // Session Management Response DTOs
+    public static class SessionStartResponse {
+        private boolean success;
+        private String message;
+        private String roomId;
+        private String videoProvider;
+        private String sessionUrl;
+        private LocalDateTime allowedStartTime;
+
+        public static class Builder {
+            private SessionStartResponse result = new SessionStartResponse();
+
+            public Builder success(boolean success) {
+                result.success = success;
+                return this;
+            }
+
+            public Builder message(String message) {
+                result.message = message;
+                return this;
+            }
+
+            public Builder roomId(String roomId) {
+                result.roomId = roomId;
+                return this;
+            }
+
+            public Builder videoProvider(String videoProvider) {
+                result.videoProvider = videoProvider;
+                return this;
+            }
+
+            public Builder sessionUrl(String sessionUrl) {
+                result.sessionUrl = sessionUrl;
+                return this;
+            }
+
+            public Builder allowedStartTime(LocalDateTime allowedStartTime) {
+                result.allowedStartTime = allowedStartTime;
+                return this;
+            }
+
+            public SessionStartResponse build() {
+                return result;
+            }
+        }
+
+        public static Builder builder() {
+            return new Builder();
+        }
+
+        // Getters
+        public boolean isSuccess() { return success; }
+        public String getMessage() { return message; }
+        public String getRoomId() { return roomId; }
+        public String getVideoProvider() { return videoProvider; }
+        public String getSessionUrl() { return sessionUrl; }
+        public LocalDateTime getAllowedStartTime() { return allowedStartTime; }
+    }
+
+    public static class SessionEndResponse {
+        private boolean success;
+        private String message;
+        private Integer durationMinutes;
+        private LocalDateTime endedAt;
+
+        public static class Builder {
+            private SessionEndResponse result = new SessionEndResponse();
+
+            public Builder success(boolean success) {
+                result.success = success;
+                return this;
+            }
+
+            public Builder message(String message) {
+                result.message = message;
+                return this;
+            }
+
+            public Builder durationMinutes(Integer durationMinutes) {
+                result.durationMinutes = durationMinutes;
+                return this;
+            }
+
+            public Builder endedAt(LocalDateTime endedAt) {
+                result.endedAt = endedAt;
+                return this;
+            }
+
+            public SessionEndResponse build() {
+                return result;
+            }
+        }
+
+        public static Builder builder() {
+            return new Builder();
+        }
+
+        // Getters
+        public boolean isSuccess() { return success; }
+        public String getMessage() { return message; }
+        public Integer getDurationMinutes() { return durationMinutes; }
+        public LocalDateTime getEndedAt() { return endedAt; }
+    }
+
+    public static class CancelConsultationResponse {
+        private boolean success;
+        private String message;
+        private LocalDateTime cancelledAt;
+
+        public static class Builder {
+            private CancelConsultationResponse result = new CancelConsultationResponse();
+
+            public Builder success(boolean success) {
+                result.success = success;
+                return this;
+            }
+
+            public Builder message(String message) {
+                result.message = message;
+                return this;
+            }
+
+            public Builder cancelledAt(LocalDateTime cancelledAt) {
+                result.cancelledAt = cancelledAt;
+                return this;
+            }
+
+            public CancelConsultationResponse build() {
+                return result;
+            }
+        }
+
+        public static Builder builder() {
+            return new Builder();
+        }
+
+        // Getters
+        public boolean isSuccess() { return success; }
+        public String getMessage() { return message; }
+        public LocalDateTime getCancelledAt() { return cancelledAt; }
+    }
+
+    public static class RescheduleConsultationResponse {
+        private boolean success;
+        private String message;
+        private LocalDateTime newDateTime;
+
+        public static class Builder {
+            private RescheduleConsultationResponse result = new RescheduleConsultationResponse();
+
+            public Builder success(boolean success) {
+                result.success = success;
+                return this;
+            }
+
+            public Builder message(String message) {
+                result.message = message;
+                return this;
+            }
+
+            public Builder newDateTime(LocalDateTime newDateTime) {
+                result.newDateTime = newDateTime;
+                return this;
+            }
+
+            public RescheduleConsultationResponse build() {
+                return result;
+            }
+        }
+
+        public static Builder builder() {
+            return new Builder();
+        }
+
+        // Getters
+        public boolean isSuccess() { return success; }
+        public String getMessage() { return message; }
+        public LocalDateTime getNewDateTime() { return newDateTime; }
     }
 }
