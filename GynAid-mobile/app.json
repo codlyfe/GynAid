@@ -2,30 +2,132 @@
   "expo": {
     "name": "GynAid Mobile",
     "slug": "GynAid-mobile",
-
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    
     "assetBundlePatterns": [
       "**/*"
     ],
+    
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gynaid.mobile",
+      "buildNumber": "1.0.0",
+      "infoPlist": {
+        "NSCameraUsageDescription": "GynAid uses camera for health profile photo verification",
+        "NSPhotoLibraryUsageDescription": "GynAid accesses photo library for health document uploads",
+        "NSHealthShareUsageDescription": "GynAid accesses health data to provide comprehensive health insights",
+        "NSHealthUpdateUsageDescription": "GynAid updates health data to track your wellness journey",
+        "NSMedicalHealthUpdateUsageDescription": "GynAid updates medical health data for gynecological tracking"
+      }
     },
+    
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
+      },
+      "package": "com.gynaid.mobile",
+      "versionCode": 1,
+      "permissions": [
+        "CAMERA",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_EXTERNAL_STORAGE",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "WAKE_LOCK",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED",
+        "FOREGROUND_SERVICE"
+      ],
+      "config": {
+        "googleMapsApiKey": "YOUR_GOOGLE_MAPS_API_KEY_HERE",
+        "permissions": {
+          "android.permissions.CAMERA": "Allow GynAid to take photos for health profile verification",
+          "android.permissions.WRITE_EXTERNAL_STORAGE": "Allow GynAid to save health documents",
+          "android.permissions.ACCESS_FINE_LOCATION": "Allow GynAid to find nearby healthcare providers"
+        }
+      },
+      "googleServicesFile": "./google-services.json"
+    },
+    
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    
+    "plugins": [
+      "expo-secure-store",
+      "expo-notifications",
+      "expo-local-authentication",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34,
+            "minSdkVersion": 21,
+            "buildToolsVersion": "34.0.0",
+            "ndkVersion": "25.1.8937393",
+            "enableProguardInReleaseBuilds": true,
+            "enableSeparateBuildPerCPUArchitecture": true,
+            "androidGradlePlugin": "8.1.2",
+            "androidGradleWrapper": "8.0"
+          },
+          "ios": {
+            "deploymentTarget": "13.0",
+            "use_frameworks": "static",
+            "enableBitcode": false
+          }
+        }
+      ]
+    ],
+    
+    "extra": {
+      "eas": {
+        "projectId": "your-eas-project-id-here"
+      },
+      "apiUrl": "https://api.gynaid.com",
+      "environment": "production",
+      "featureFlags": {
+        "enableBiometricAuth": true,
+        "enableOfflineMode": true,
+        "enableHealthKitSync": true,
+        "enablePushNotifications": true
+      },
+      "security": {
+        "enableAppTransportSecurity": true,
+        "enableCertificatePinning": false,
+        "sessionTimeout": 1800000,
+        "requireBiometricAuth": true
+      },
+      "analytics": {
+        "enableCrashReporting": true,
+        "enablePerformanceMonitoring": true,
+        "enableUserAnalytics": false
       }
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
+    
+    "updates": {
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/your-project-id"
+    },
+    
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    
+    "autoUpdate": {
+      "ios": true,
+      "android": true
     }
   }
 }

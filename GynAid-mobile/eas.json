@@ -1,0 +1,87 @@
+{
+  "cli": {
+    "version": ">= 3.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "resourceClass": "m1-medium"
+      },
+      "android": {
+        "resourceClass": "large",
+        "gradleCommand": ":app:assembleDebug"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "ios": {
+        "resourceClass": "m1-medium",
+        "simulator": true,
+        "buildConfiguration": "Debug"
+      },
+      "android": {
+        "resourceClass": "large",
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleDebug"
+      }
+    },
+    "production": {
+      "ios": {
+        "resourceClass": "m1-medium",
+        "buildConfiguration": "Release",
+        "bundleIdentifier": "com.gynaid.mobile",
+        "appStoreConnect": {
+          "apiKey": "$EXPO_APPLE_API_KEY",
+          "issuerId": "$EXPO_APPLE_ISSUER_ID",
+          "keyId": "$EXPO_APPLE_KEY_ID"
+        }
+      },
+      "android": {
+        "resourceClass": "large",
+        "buildType": "apk",
+        "applicationId": "com.gynaid.mobile",
+        "gradleCommand": ":app:assembleRelease",
+        "artifactType": "apk"
+      },
+      "channels": ["production"]
+    },
+    "healthcare": {
+      "extends": "production",
+      "env": {
+        "EXPO_PUBLIC_ENVIRONMENT": "production",
+        "EXPO_PUBLIC_SECURITY_LEVEL": "high",
+        "EXPO_PUBLIC_ENABLE_BIOMETRICS": "true",
+        "EXPO_PUBLIC_SESSION_TIMEOUT": "1800000",
+        "EXPO_PUBLIC_ENABLE_OFFLINE_MODE": "true"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "$EXPO_APPLE_ID",
+        "ascAppId": "YOUR_APP_STORE_ID",
+        "appleTeamId": "$EXPO_APPLE_TEAM_ID",
+        "submitProfile": "GynAid-Production"
+      },
+      "android": {
+        "serviceAccountKeyPath": "../path/to/api-key.json",
+        "track": "production",
+        "applicationId": "com.gynaid.mobile"
+      }
+    },
+    "healthcare": {
+      "extends": "production",
+      "ios": {
+        "ascAppId": "YOUR_APP_STORE_ID",
+        "submitProfile": "GynAid-Healthcare"
+      },
+      "android": {
+        "track": "internal",
+        "applicationId": "com.gynaid.mobile"
+      }
+    }
+  }
+}
