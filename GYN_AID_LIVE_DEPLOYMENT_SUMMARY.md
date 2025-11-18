@@ -137,7 +137,7 @@ railway variables set JWT_SECRET=your-super-secure-jwt-secret
 railway up
 ```
 
-### **Phase 2: Frontend (Vercel) - 10 minutes**
+### **Phase 2: Frontend (Vercel) - 10 minutes** 
 ```bash
 # 1. Install Vercel CLI
 npm install -g vercel

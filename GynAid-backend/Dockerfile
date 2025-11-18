@@ -1,35 +1,18 @@
-# Use OpenJDK 17 with Alpine for smaller image size
-FROM openjdk:17-jdk-alpine
+# Use Liberica JDK 21 (Alpine-based, smaller image)
+FROM bellsoft/liberica-openjdk-alpine:21
 
-# Set working directory
 WORKDIR /app
 
-# Install Maven
-RUN apk add --no-cache maven
-
-# Copy Maven files
-COPY pom.xml .
-COPY mvnw .
-COPY .mvn .mvn
-
-# Make Maven wrapper executable
-RUN chmod +x ./mvnw
-
-# Download dependencies (this layer will be cached)
-RUN ./mvnw dependency:go-offline -B
-
-# Copy source code
-COPY src ./src
-
-# Build the application
-RUN ./mvnw clean package -DskipTests
+# Copy the built JAR into the container
+COPY target/*.jar app.jar
 
 # Expose port
 EXPOSE 8080
 
-# Add health check
+# Health check (install curl first)
+RUN apk add --no-cache curl
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:8080/actuator/health || exit 1
 
 # Run the application
-CMD ["java", "-jar", "target/gynaid-backend-0.0.1.jar"]
+CMD ["java", "-jar", "app.jar"]
