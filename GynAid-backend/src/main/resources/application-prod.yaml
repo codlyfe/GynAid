@@ -2,19 +2,23 @@ spring:
   config:
     activate:
       on-profile: prod
+
   datasource:
+    # Use Railway's injected DATABASE_URL, with a local fallback
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/GynAid_prod}
     username: ${DATABASE_USERNAME:postgres}
     password: ${DATABASE_PASSWORD}
     driver-class-name: org.postgresql.Driver
+
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: validate   # safer than update in production
     show-sql: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: false
+
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -23,12 +27,13 @@ spring:
 app:
   jwt:
     secret: ${JWT_SECRET}
-    expiration: 86400000
+    expiration: 86400000   # 24 hours
   moh:
     api-url: ${MOH_API_URL:https://api.health.go.ug/validate}
     api-key: ${MOH_API_KEY}
 
 server:
+  # Railway injects PORT, so use it here
   port: ${PORT:8080}
   compression:
     enabled: true
@@ -50,7 +55,11 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
-      show-details: when-authorized
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true

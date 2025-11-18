@@ -14,14 +14,12 @@ spring:
       idle-timeout: 300000
       max-lifetime: 1200000
       leak-detection-threshold: 60000
-  # Default H2 console configuration from application.properties
   h2:
     console:
       enabled: true
       path: /h2-console
       settings:
         web-allow-others: true
-  # Default JPA configuration from application.properties
   jpa:
     database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
@@ -39,7 +37,6 @@ spring:
         cache:
           use_second_level_cache: false
           use_query_cache: false
-  # Flyway configuration from application.properties
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -67,13 +64,10 @@ spring:
             enable: false
 
 app:
-  # JWT Configuration
   jwt:
     secret: rrFe439oNlu3qVzy2usa7xpx9/9dYB83tnofz2JpOJU=
-    expiration: 86400000  # 24 hours in milliseconds
-    refresh-expiration: 604800000  # 7 days in milliseconds
-    
-  # Email Verification Configuration
+    expiration: 86400000
+    refresh-expiration: 604800000
   verification:
     email:
       expiry-minutes: 30
@@ -83,46 +77,34 @@ app:
       expiry-minutes: 10
       max-attempts: 5
       resend-delay-minutes: 10
-      
-  # Security Configuration
   security:
     rate-limiting:
       enabled: true
       requests-per-minute: 100
       burst-capacity: 200
-      
-  # CORS Configuration from application.properties
   cors:
     allowed-origins: http://localhost:5173,http://localhost:3000
     allowed-methods: GET,POST,PUT,DELETE,OPTIONS,PATCH
     allowed-headers: "*"
     allow-credentials: true
-      
-  # Transaction Management from application.properties
   transaction:
     connection:
       pool_size: 20
       autocommit: false
     coordinator_class: jdbc
     statement_cache_size: 50
-      
-  # Feature Flags Configuration
   feature-flags:
     poll-interval: 60
     cache-timeout: 300
-    
-  # Payment Configuration
   payment:
     expiry-hours: 24
     idempotency-timeout-hours: 24
-    
-  # MOH Integration Configuration
   moh:
     api-url: http://localhost:9999/mock-moh/validate
     api-key: dev-placeholder-key
 
 ---
-# Development profile with H2 database
+# Development profile with H2
 spring:
   config:
     activate:
@@ -146,32 +128,23 @@ spring:
         format_sql: true
   sql:
     init:
-      mode: never  # Disable schema.sql for H2 to avoid PostGIS-specific statements
+      mode: never
 
 app:
-  # Development-specific email settings
   email:
     from-name: "GynAid Dev"
     from-address: "dev@gyna-id.com"
-    
-  # SMS Configuration for Development
   sms:
     twilio:
       account-sid: ${TWILIO_ACCOUNT_SID:dev_account_sid}
       auth-token: ${TWILIO_AUTH_TOKEN:dev_auth_token}
       phone-number: ${TWILIO_PHONE_NUMBER:+1234567890}
-      
-  # MFA Configuration
   mfa:
     issuer: "GynAid Dev"
     qr-code-url: "https://api.qrserver.com/v1/create-qr-code"
-    
-  # Stripe Configuration
   stripe:
     secret-key: ${STRIPE_SECRET_KEY:sk_test_dev_key}
     webhook-secret: ${STRIPE_WEBHOOK_SECRET:whsec_dev_secret}
-    
-  # Mobile Money Configuration
   mobile-money:
     mtn:
       client-id: ${MTN_CLIENT_ID:dev_mtn_client}
@@ -181,16 +154,14 @@ app:
       client-id: ${AIRTEL_CLIENT_ID:dev_airtel_client}
       client-secret: ${AIRTEL_CLIENT_SECRET:dev_airtel_secret}
       base-url: https://sandbox.airtel.africa
-      
-  # Security Settings
   security:
     rate-limiting:
-      enabled: false  # Disabled for development
+      enabled: false
     jwt:
-      blacklist-enabled: false  # Disabled for development
+      blacklist-enabled: false
 
 ---
-# Test profile with H2 database
+# Test profile with H2
 spring:
   config:
     activate:
@@ -236,24 +207,22 @@ app:
     webhook-secret: whsec_test_secret
   security:
     rate-limiting:
-      requests-per-minute: 1000  # Higher limit for testing
+      requests-per-minute: 1000
       burst-capacity: 2000
 
 ---
-# Production profile with PostgreSQL
+# Production profile with Railway PostgreSQL
 spring:
   config:
     activate:
       on-profile: prod
   datasource:
-    url: jdbc:postgresql://localhost:5432/registration
-    username: postgres
-    password: "0000"
+    url: ${DATABASE_URL}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: false  # Disabled in production
+    show-sql: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -299,18 +268,16 @@ app:
   security:
     rate-limiting:
       enabled: true
-      requests-per-minute: 60  # Conservative limits for production
+      requests-per-minute: 60
       burst-capacity: 100
     jwt:
       blacklist-enabled: true
 
-# Server configuration
 server:
-  port: ${SERVER_PORT:8080}
+  port: ${PORT:8080}   # ✅ Correct binding for Railway
   servlet:
     context-path: /api
-    
-# Actuator endpoints for monitoring
+
 management:
   endpoints:
     web:
@@ -323,8 +290,7 @@ management:
     export:
       prometheus:
         enabled: true
-        
-# Logging configuration
+
 logging:
   level:
     com.gynaid: DEBUG
@@ -338,9 +304,4 @@ logging:
     com.gynaid.backend: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
-  file:
-    name: logs/gyna-id.log
-    max-size: 100MB
-    max-history: 30
-
+    file: "%msg%n"
