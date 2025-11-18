@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
  * Provides comprehensive security validation for all user inputs
  * to prevent XSS, injection attacks, and other security vulnerabilities.
  *
- * @author GynAid Security Team
+ * @author GynAid Team
  * @version 1.0
  */
 @Slf4j

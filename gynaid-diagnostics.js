@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * GynaId COMPREHENSIVE DIAGNOSTICS TOOL
+ * GynAid COMPREHENSIVE DIAGNOSTICS TOOL
  * Consolidates all testing, debugging, and validation functionality
  */
 
@@ -9,7 +9,7 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
-class GynaIdDiagnostics {
+class GynAidDiagnostics {
     constructor() {
         this.baseURL = 'http://localhost:8080';
         this.frontendURL = 'http://localhost:5173';
@@ -23,7 +23,7 @@ class GynaIdDiagnostics {
     }
 
     async runDiagnostics(mode = 'full') {
-        console.log('🔍 GynaId COMPREHENSIVE DIAGNOSTICS\n');
+        console.log('🔍 GynAid COMPREHENSIVE DIAGNOSTICS\n');
         
         switch (mode) {
             case 'connectivity':
@@ -367,7 +367,7 @@ async function main() {
     const args = process.argv.slice(2);
     const mode = args[0] || 'full';
     
-    const diagnostics = new GynaIdDiagnostics();
+    const diagnostics = new GynAidDiagnostics();
     
     console.log('Available modes: full, connectivity, auth, schema, recovery\n');
     
@@ -382,4 +382,4 @@ if (require.main === module) {
     main();
 }
 
-module.exports = GynaIdDiagnostics;
+module.exports = GynAidDiagnostics;

@@ -11,7 +11,7 @@ class ApiServiceClass {
   private requestQueue: Array<() => Promise<any>> = [];
 
   constructor() {
-    this.baseURL = __DEV__ ? 'http://10.0.2.2:8080' : 'https://api.GynAid.ug';
+    this.baseURL = __DEV__ ? 'http://10.0.2.2:8080' : 'https://api.gynaid.ug';
     
     this.api = axios.create({
       baseURL: this.baseURL,

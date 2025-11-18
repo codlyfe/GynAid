@@ -25,9 +25,7 @@
     "types": [
       "react-native",
       "react-native/types",
-      "expo",
-      "expo/types",
-      "jest"
+      "expo"
     ],
     "declaration": false,
     "declarationMap": false,
@@ -47,8 +45,7 @@
     "forceConsistentCasingInFileNames": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "importsNotUsedAsValues": "error",
-    "preserveValueImports": true
+    "verbatimModuleSyntax": true
   },
   "include": [
     "**/*.ts",

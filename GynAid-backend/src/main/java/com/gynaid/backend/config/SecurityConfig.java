@@ -66,6 +66,7 @@ public class SecurityConfig {
                     "/api/auth/verify-email",
                     "/api/auth/reset-password",
                     "/api/health",
+                    "/api/placeholder/**",
                     "/api/webhooks/**",
                     "/actuator/health",
                     "/error",
@@ -120,14 +121,14 @@ public class SecurityConfig {
         if ("production".equals(environment)) {
             // Production: Only production domains
             allowedOrigins = Arrays.asList(
-                "https://gyna-id.com",
-                "https://app.gyna-id.com"
+                "https://gynaid.com",
+                "https://app.gynaid.com"
             );
         } else {
             // Development/Staging: Include localhost for development
             allowedOrigins = Arrays.asList(
-                "https://gyna-id.com",
-                "https://app.gyna-id.com",
+                "https://gynaid.com",
+                "https://app.gynaid.com",
                 "http://localhost:3000",  // React dev server
                 "http://localhost:5173",  // Vite dev server
                 "http://127.0.0.1:3000",
